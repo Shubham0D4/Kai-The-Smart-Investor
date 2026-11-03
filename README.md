@@ -1,4 +1,4 @@
-# Kai — Your Investing Copilot
+# Kai — The Smart Investor
 
 **Kai** is an AI-powered investment analysis system that uses a **multi-agent debate architecture** to provide explainable, trustworthy, and data-driven investment insights. Unlike black-box models, Kai employs a "Council of Agents" — led by a Coordinator — to debate investment theses from fundamental, sentiment, and valuation perspectives before a Judge agent creates a final "Alpha Packet" for the user.
 

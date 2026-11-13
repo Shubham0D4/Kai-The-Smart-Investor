@@ -8,9 +8,9 @@ was given. The model's reply is validated here; one retry is allowed, then the a
 
 import json
 from dataclasses import dataclass, field
-from typing import Annotated, Any, Dict, Iterable, List, Literal, Optional, Union
+from typing import Annotated, Any, Callable, Dict, Iterable, List, Literal, Optional, Type, TypeVar, Union
 
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 
 # --------------------------------------------------------------------------- evidence
@@ -103,6 +103,63 @@ class AgentOutput(BaseModel):
         return out
 
 
+# --------------------------------------------------------------------------- rounds 2 and 3
+
+Verdict = Literal["dispute", "qualify", "support"]
+Stance = Literal["bullish", "neutral", "bearish"]
+
+
+class Critique(BaseModel):
+    """Round 2: challenge or confirm one claim of another agent, backed by own evidence."""
+    id: str = Field(pattern=r"^K\d+$")
+    target: str = Field(pattern=r"^(charlie|delta|gamma)\.[A-Za-z0-9_]+$")   # "<agent>.<claim id>"
+    verdict: Verdict
+    argument: str = Field(min_length=1)
+    evidence: List[str] = Field(min_length=1)
+
+
+class CritiqueOutput(BaseModel):
+    agent: AgentName
+    round: Literal[2]
+    critiques: List[Critique] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _unique(self):
+        ids = [c.id for c in self.critiques]
+        if len(ids) != len(set(ids)):
+            raise ValueError("critique ids must be unique")
+        return self
+
+
+class ClaimChange(BaseModel):
+    """Round 3: what happened to one of the agent's own round-1 claims."""
+    claim: str
+    action: Literal["kept", "revised", "withdrawn"]
+    reason: str = Field(min_length=1)
+    in_response_to: List[str] = Field(default_factory=list)   # "<agent>.K<n>"
+
+
+class ViewChange(BaseModel):
+    """Round 3: another agent's claim or critique that changed this agent's view."""
+    ref: str                                                    # "<agent>.C<n>" or "<agent>.K<n>"
+    reason: str = Field(min_length=1)
+
+
+class StanceChange(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    from_: Stance = Field(alias="from")
+    to: Stance
+    reason: str = ""
+
+
+class FinalOutput(AgentOutput):
+    """Round 3: a full AgentOutput plus what changed and why."""
+    round: Literal[3]
+    changes: List[ClaimChange] = Field(default_factory=list)
+    changed_by: List[ViewChange] = Field(default_factory=list)
+    stance_change: StanceChange
+
+
 # --------------------------------------------------------------------------- prompting
 
 SCHEMA_INSTRUCTIONS = """
@@ -173,18 +230,27 @@ def extract_json(text: str) -> Any:
     return json.loads(s[start:end + 1])
 
 
-def validate_output(
-    text: str, *, agent: str, round_number: int, evidence_ids: Iterable[str]
-) -> AgentOutput:
-    """Parse and validate a reply. Raises ValueError with a readable reason."""
+M = TypeVar("M", bound=BaseModel)
+
+
+def parse_model(text: str, model_cls: Type[M]) -> M:
+    """Extract JSON from a reply and validate it against a pydantic model.
+    Raises ValueError with a readable reason."""
     try:
         data = extract_json(text)
     except (ValueError, json.JSONDecodeError) as e:
         raise ValueError(f"invalid JSON: {e}") from e
     try:
-        out = AgentOutput.model_validate(data)
+        return model_cls.model_validate(data)
     except ValidationError as e:
         raise ValueError(f"schema violation: {e.errors(include_url=False)}") from e
+
+
+def validate_output(
+    text: str, *, agent: str, round_number: int, evidence_ids: Iterable[str]
+) -> AgentOutput:
+    """Parse and validate a round-1 reply. Raises ValueError with a readable reason."""
+    out = parse_model(text, AgentOutput)
     if out.agent != agent or out.round != round_number:
         raise ValueError(f"expected agent={agent!r} round={round_number}, got agent={out.agent!r} round={out.round}")
     known = set(evidence_ids)
@@ -196,7 +262,7 @@ def validate_output(
 
 @dataclass
 class StructuredResult:
-    output: Optional[AgentOutput]
+    output: Optional[BaseModel]
     error: Optional[str]
     error_type: Optional[str]           # "llm" | "invalid_output"
     attempts: int
@@ -216,11 +282,9 @@ def _usage(response) -> Dict[str, int]:
     }
 
 
-def generate_agent_output(
-    model, prompt: str, *, agent: str, round_number: int, evidence_ids: Iterable[str]
-) -> StructuredResult:
-    """Call the model, validate, retry once on invalid output, then fail cleanly."""
-    evidence_ids = list(evidence_ids)
+def generate_validated(model, prompt: str, validate: Callable[[str], BaseModel]) -> StructuredResult:
+    """Call the model, validate the reply, retry once on invalid output, then fail cleanly.
+    Token usage is summed over every attempt, including rejected ones."""
     usage = {"prompt_tokens": 0, "candidates_tokens": 0, "total_tokens": 0}
     current_prompt = prompt
     last_error = None
@@ -233,8 +297,7 @@ def generate_agent_output(
             usage[k] += v
         text = getattr(response, "text", "") or ""
         try:
-            out = validate_output(text, agent=agent, round_number=round_number, evidence_ids=evidence_ids)
-            return StructuredResult(out, None, None, attempt, usage)
+            return StructuredResult(validate(text), None, None, attempt, usage)
         except ValueError as e:
             last_error = str(e)
             current_prompt = (
@@ -243,6 +306,15 @@ def generate_agent_output(
                 "Reply again with ONLY the corrected JSON object."
             )
     return StructuredResult(None, f"invalid output after 2 attempts: {last_error}", "invalid_output", 2, usage)
+
+
+def generate_agent_output(
+    model, prompt: str, *, agent: str, round_number: int, evidence_ids: Iterable[str]
+) -> StructuredResult:
+    """Round-1 generation: an AgentOutput citing only the given evidence ids."""
+    evidence_ids = list(evidence_ids)
+    return generate_validated(model, prompt, lambda text: validate_output(
+        text, agent=agent, round_number=round_number, evidence_ids=evidence_ids))
 
 
 def render_output(out: AgentOutput) -> str:
@@ -254,6 +326,28 @@ def render_output(out: AgentOutput) -> str:
     if out.risks:
         lines.append("Risks:")
         lines.extend(f"- {r}" for r in out.risks)
+    return "\n".join(lines)
+
+
+def render_critiques(out: CritiqueOutput) -> str:
+    lines = [f"Round 2 critiques by {out.agent}:"]
+    for c in out.critiques:
+        lines.append(f"- [{c.id}] {c.verdict.upper()} {c.target}: {c.argument} ({', '.join(c.evidence)})")
+    return "\n".join(lines)
+
+
+def render_final(out: FinalOutput) -> str:
+    sc = out.stance_change
+    head = (f"Final stance: {out.stance} (confidence {out.confidence:g}); "
+            + (f"changed from {sc.from_}: {sc.reason}" if sc.from_ != sc.to else f"unchanged from round 1"))
+    lines = [head, render_output(out).split("\n", 1)[1]]
+    if out.changed_by:
+        lines.append("Changed my view:")
+        lines.extend(f"- {v.ref}: {v.reason}" for v in out.changed_by)
+    if out.changes:
+        lines.append("Own claims after critique:")
+        lines.extend(f"- {c.claim} {c.action}: {c.reason}"
+                     + (f" (re {', '.join(c.in_response_to)})" if c.in_response_to else "") for c in out.changes)
     return "\n".join(lines)
 
 

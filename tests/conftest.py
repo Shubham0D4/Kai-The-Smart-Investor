@@ -232,10 +232,51 @@ def valid_output_for(prompt: str) -> str:
                        "claims": claims, "risks": ["canned risk"]})
 
 
+def _section_ids(prompt: str, heading: str):
+    """Evidence ids listed under a '## <heading>' section of a round 2/3 prompt."""
+    body = prompt.split(heading, 1)[1].split("\n## ", 1)[0]
+    return _EVIDENCE_LINE.findall(body)
+
+
+def valid_round2_for(prompt: str) -> str:
+    agent = re.search(r"You are (charlie|delta|gamma)\.", prompt).group(1)
+    own = _section_ids(prompt, "## Your evidence")
+    targets = re.search(r"Claims you may target: (.*)", prompt).group(1).split(", ")
+    first_per_agent = {}
+    for t in targets:
+        first_per_agent.setdefault(t.split(".")[0], t)
+    critiques = [{"id": f"K{i}", "target": t, "verdict": "qualify",
+                  "argument": f"Canned argument from {agent} about {t}", "evidence": [own[0]]}
+                 for i, t in enumerate(first_per_agent.values(), start=1)]
+    return json.dumps({"agent": agent, "round": 2, "critiques": critiques})
+
+
+def valid_round3_for(prompt: str) -> str:
+    agent = re.search(r"You are (charlie|delta|gamma)\.", prompt).group(1)
+    stance = re.search(r"Your round-1 stance: (\w+)", prompt).group(1)
+    own = _section_ids(prompt, "## Your evidence")
+    received = re.findall(r"^- ((?:charlie|delta|gamma)\.K\d+) \(\w+, targets \w+\.(\w+)\)", prompt, re.M)
+    by_claim = {}
+    for ref, claim in received:
+        by_claim.setdefault(claim, []).append(ref)
+    changes = [{"claim": c, "action": "kept", "reason": "evidence unchanged", "in_response_to": refs}
+               for c, refs in by_claim.items()]
+    claims = [{"id": "C1", "kind": "numeric", "text": f"Value of {own[0]}", "value": 1.0, "unit": "USD",
+               "op": "equals", "evidence": [own[0]]},
+              {"id": "C2", "kind": "inference", "text": "Final view", "based_on": ["C1"]}]
+    return json.dumps({"agent": agent, "round": 3, "stance": stance, "confidence": 60,
+                       "claims": claims, "risks": ["canned risk"], "changes": changes,
+                       "changed_by": [], "stance_change": {"from": stance, "to": stance, "reason": ""}})
+
+
 def _schema_responder(prompt: str) -> str:
+    if "ROUND 2 - CROSS-EXAMINATION" in prompt:
+        return valid_round2_for(prompt)
+    if "ROUND 3 - FINAL POSITION" in prompt:
+        return valid_round3_for(prompt)
     if "Return ONLY a JSON object" in prompt:
         return valid_output_for(prompt)
-    return "Canned critique text."   # rounds 2 and 3 are still free text (FIXES.md C3)
+    return "Canned text."
 
 
 @pytest.fixture
@@ -246,5 +287,5 @@ def make_valid_output():
 
 @pytest.fixture
 def schema_llm():
-    """FakeLLMClient that answers round-1 prompts with schema-valid JSON."""
+    """FakeLLMClient that answers round 1, 2 and 3 prompts with schema-valid JSON."""
     return FakeLLMClient(responses=_schema_responder)

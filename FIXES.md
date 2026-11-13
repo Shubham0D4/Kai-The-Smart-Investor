@@ -4,7 +4,7 @@
 - [x] C1 Charlie never reads the filing: prompt has only form type, date, URL.
 - [x] C2 Delta sees only headlines. Gamma depends on user-typed price/EPS/growth;
       DCF and risk metrics never run (coordinator passes no cash flows or price history).
-- [ ] C3 Rounds 2 and 3 are fresh LLM calls with no history. Round 2 gets a
+- [x] C3 Rounds 2 and 3 are fresh LLM calls with no history. Round 2 gets a
       300-char truncation; round 3 gets no debate content at all.
 - [ ] C4 Faithfulness only checks that grounding_sources is non-empty, and the
       coordinator hardcodes those strings. Circuit breaker cannot trip.
@@ -21,7 +21,7 @@
 - [ ] B4 user_id comes from request body, not the token; /chat and /status have no auth.
 - [ ] B5 run_analysis is async but runs blocking code; server freezes during a debate.
 - [ ] B6 Sessions and history are in-memory dicts.
-- [ ] B7 Token limit counts round 1 only; Sigma's LLM synthesis runs twice.
+- [x] B7 Token limit counts round 1 only; Sigma's LLM synthesis runs twice.
 - [ ] B8 Frontend shows Math.random() signals, prices, trace metrics; CitationPopover is mock.
 - [ ] B9 Gateway returns hardcoded index values when yfinance fails.
 - [x] B10 Tests need live API keys; mcp_config.json has a hardcoded local path;
@@ -77,3 +77,24 @@
   Nvidia). No relevance filter yet; Delta is told to weigh evidence, but this will need one.
 - Found: the semantic cache in mcp_server still returns results by embedding similarity
   (DESIGN.md §7); the new tools are exposed through it unchanged.
+
+## Phase 3 (branch phase-3-debate) notes
+- C3: coordinator/transcript.py holds every round's structured output. Round 2 and 3 prompts
+  carry the agent's own earlier output(s) in full, its own evidence, and the other agents'
+  full claims (plus the evidence they cited) and, in round 3, their critiques.
+  `_extract_key_points` / `_prepare_round_context` are deleted.
+- Round 2: every agent critiques claims by id (`charlie.C2`), at least one per other agent,
+  each backed by ids from its OWN evidence; validated, one retry.
+- Round 3: final stance and claims plus `changes` (answering every critique received),
+  `changed_by` (which claims/critiques changed the view and why) and `stance_change`;
+  a stance change without a reason and a changed_by entry is rejected.
+- B7: tokens of every LLM call in every round, including rejected retries, count against
+  TOKEN_LIMIT and are stored in the log (`metadata.total_tokens`, `transcript.llm_calls`).
+  The mid-debate circuit breaker calls `SigmaAgent.score_debate` (no LLM); Sigma's synthesis
+  now runs once, in the gateway after the debate.
+- Added: a debate with fewer than two valid round-1 agents stops after round 1
+  (TERMINATED_EARLY / INSUFFICIENT_AGENTS) instead of running critiques against nobody.
+- Still open (C4): the circuit breaker now runs cheaply, but faithfulness still only checks
+  that grounding_sources is non-empty, so it still cannot trip in practice.
+- Found: when the token limit is hit the coordinator raises; the gateway marks the session
+  FAILED rather than returning a partial result. Consider a NO_VERDICT result instead.

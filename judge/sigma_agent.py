@@ -52,8 +52,9 @@ class SigmaAgent:
             debate_log = json.load(f)
         
         # Calculate scores
-        faithfulness_score = self.evaluate_faithfulness(debate_log)
-        consistency_score = self.evaluate_consistency(debate_log)
+        scores = self.score_debate(debate_log)
+        faithfulness_score = scores["faithfulness_score"]
+        consistency_score = scores["consistency_score"]
         
         # Synthesize final recommendation
         final_recommendation = self.synthesize_recommendation(
@@ -79,6 +80,16 @@ class SigmaAgent:
             }
         }
     
+    def score_debate(self, debate_log: Dict) -> Dict:
+        """
+        Deterministic scores only, no LLM call. Used by the coordinator's mid-debate
+        circuit breaker so the LLM synthesis runs once, after the debate (FIXES.md B7).
+        """
+        return {
+            "faithfulness_score": self.evaluate_faithfulness(debate_log),
+            "consistency_score": self.evaluate_consistency(debate_log),
+        }
+
     def evaluate_faithfulness(self, debate_log: Dict) -> float:
         """
         Calculate faithfulness score (0-100).

@@ -20,7 +20,8 @@ from agents.delta_sentiment.agent import DeltaAgent
 from agents.gamma_valuation.agent import GammaAgent
 from judge.sigma_agent import SigmaAgent
 from mcp_server.tools.sec_financials import fetch_financial_statements
-import time
+from coordinator.transcript import Transcript
+from agents.schema import generate_validated, render_critiques, render_final
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -46,8 +47,9 @@ class DebateCoordinator:
         self.ticker = ticker.upper()
         self.persona = persona
         
-        # Initialize logger
+        # Initialize logger and the shared debate transcript
         self.logger = DebateLogger(ticker, persona.value)
+        self.transcript = Transcript(self.ticker)
         
         # Load agent cards for A2A handshake
         self.agent_cards = self._load_agent_cards()
@@ -55,7 +57,8 @@ class DebateCoordinator:
         # Governance
         self.TOKEN_LIMIT = 50000
         self.total_tokens_used = 0
-        self.sigma = SigmaAgent(llm_client=llm_client)  # Circuit Breaker Judge
+        self.CIRCUIT_BREAKER_MIN_FAITHFULNESS = 50.0
+        self.sigma = SigmaAgent(llm_client=llm_client)  # scores only during the debate
         
         # Initialize agents
         print(f"[COORDINATOR] Initializing agents with {persona.value} persona...")
@@ -67,15 +70,25 @@ class DebateCoordinator:
         print(f"[COORDINATOR] Agents ready: Charlie, Delta, Gamma")
         print(f"[COORDINATOR] MCP tools verified\n")
         
-    def _track_usage(self, agent_name: str, result: Dict):
-        """Track token usage from agent response."""
-        usage = result.get("token_usage", {})
+    def _track_usage(self, agent_name: str, round_number: int, usage: Dict, ok: bool = True):
+        """Count the tokens of one LLM call (all attempts, accepted or not) against the limit.
+        Called after every LLM call in every round."""
         total_tokens = usage.get("total_tokens", 0)
         self.total_tokens_used += total_tokens
-        print(f"[GOVERNANCE] {agent_name} used {total_tokens} tokens. Total: {self.total_tokens_used}/{self.TOKEN_LIMIT}")
+        self.transcript.record_call(agent_name, round_number, usage, ok)
+        print(f"[GOVERNANCE] {agent_name} round {round_number} used {total_tokens} tokens. "
+              f"Total: {self.total_tokens_used}/{self.TOKEN_LIMIT}")
         
         if self.total_tokens_used > self.TOKEN_LIMIT:
-            raise Exception(f"HARD LIMIT EXCEEDED: Debate used {self.total_tokens_used} tokens (Limit: {self.TOKEN_LIMIT})")
+            msg = f"HARD LIMIT EXCEEDED: Debate used {self.total_tokens_used} tokens (Limit: {self.TOKEN_LIMIT})"
+            self.logger.log_system_message(msg)
+            self._save_transcript()
+            raise Exception(msg)
+
+    def _save_transcript(self):
+        self.logger.debate_log["transcript"] = self.transcript.to_dict()
+        self.logger.debate_log["metadata"]["total_tokens"] = self.total_tokens_used
+        self.logger._save_log()
     
     def _load_agent_cards(self) -> Dict:
         """Load A2A agent cards for capability discovery."""
@@ -119,61 +132,49 @@ class DebateCoordinator:
         
         # Round 1: Initial Analysis
         self.logger.log_round_start(1)
-        round1_results = self._run_round_1(charlie_filing_type, delta_days)
+        self._run_round_1(charlie_filing_type, delta_days)
         
+        def finish(rounds_completed: int, **extra) -> Dict:
+            self._save_transcript()
+            return {
+                "ticker": self.ticker,
+                "persona": self.persona.value,
+                "rounds_completed": rounds_completed,
+                "total_tokens_used": self.total_tokens_used,
+                "log_file": self.logger.finalize(),
+                "debate_id": self.logger.debate_id,
+                **extra,
+            }
+
+        if rounds >= 2 and len(self.transcript.participants()) < 2:
+            reason = (f"only {len(self.transcript.participants())} agent(s) produced a valid round-1 "
+                      f"output; a debate needs at least two")
+            self.logger.log_system_message(f"Debate stopped after round 1: {reason}")
+            return finish(1, status="TERMINATED_EARLY", reason="INSUFFICIENT_AGENTS", detail=reason)
+
         if rounds >= 2:
-            # Round 2: Cross-Critique
+            # Round 2: Cross-examination of specific claims
             self.logger.log_round_start(2)
-            round2_results = self._run_round_2(round1_results)
+            self._run_round_2()
             
-            # Circuit Breaker Check after Round 2
+            # Circuit breaker after round 2: deterministic scores only, no LLM synthesis
             print(f"[GOVERNANCE] Checking Phase 2 Circuit Breaker...")
-            # We construct a temporary log to evaluate faithfulness so far
-            # In a real system, we might stream this, but here we just re-read what we have or pass current state
-            # For simplicity, we'll ask Sigma to evaluate based on the rounds completed
-            
-            # Flush logger to ensure data is on disk (or strictly relying on in-memory state if we refactor Sigma)
-            # But Sigma.evaluate_debate reads from file. So let's flush.
-            temp_log_path = self.logger.log_file
-            self.logger._save_log() # Force save
-            
-            try:
-                evaluation = self.sigma.evaluate_debate(temp_log_path)
-                faithfulness = evaluation["evaluation"]["faithfulness_score"]
-                print(f"[GOVERNANCE] Current Faithfulness Score: {faithfulness}/100")
-                
-                if faithfulness < 50.0:
-                    print(f"[GOVERNANCE] !!! CIRCUIT BREAKER TRIGGERED !!!")
-                    print(f"Reason: Faithfulness Score ({faithfulness}) < 50.0")
-                    # We terminate early
-                    log_file = self.logger.finalize()
-                    return {
-                        "ticker": self.ticker,
-                        "persona": self.persona.value,
-                        "rounds_completed": 2,
-                        "status": "TERMINATED_EARLY",
-                        "reason": "CIRCUIT_BREAKER_FAITHFULNESS",
-                        "log_file": log_file,
-                        "debate_id": self.logger.debate_id
-                    }
-            except Exception as e:
-                print(f"[GOVERNANCE] Warning: Circuit breaker check failed: {e}")
+            scores = self.sigma.score_debate(self.logger.debate_log)
+            faithfulness = scores["faithfulness_score"]
+            print(f"[GOVERNANCE] Current Faithfulness Score: {faithfulness}/100")
+            if faithfulness < self.CIRCUIT_BREAKER_MIN_FAITHFULNESS:
+                print(f"[GOVERNANCE] !!! CIRCUIT BREAKER TRIGGERED !!!")
+                self.logger.log_system_message(
+                    f"Circuit breaker: faithfulness {faithfulness} < {self.CIRCUIT_BREAKER_MIN_FAITHFULNESS}")
+                return finish(2, status="TERMINATED_EARLY", reason="CIRCUIT_BREAKER_FAITHFULNESS",
+                              scores=scores)
         
         if rounds >= 3:
-            # Round 3: Final Positions
+            # Round 3: Final positions with stated changes
             self.logger.log_round_start(3)
-            round3_results = self._run_round_3(round1_results, round2_results)
+            self._run_round_3()
         
-        # Finalize debate
-        log_file = self.logger.finalize()
-        
-        return {
-            "ticker": self.ticker,
-            "persona": self.persona.value,
-            "rounds_completed": rounds,
-            "log_file": log_file,
-            "debate_id": self.logger.debate_id
-        }
+        return finish(rounds)
     
     def _run_round_1(
         self,
@@ -194,6 +195,7 @@ class DebateCoordinator:
         self.logger.log_system_message(f"Charlie (Fundamental Specialist) is fetching SEC filings for {self.ticker}...")
         print(f"[COORDINATOR] Calling Charlie for fundamental analysis...")
         charlie_result = self.charlie.analyze(self.ticker, charlie_filing_type, financials=financials)
+        self._track_round1_usage("charlie", charlie_result)
         
         if not charlie_result.get("error"):
             grounding_sources = [f"SEC XBRL company facts ({', '.join(financials['fiscal_years'])})"]
@@ -209,7 +211,7 @@ class DebateCoordinator:
                 metadata=self._structured_metadata(charlie_result, filing_reference=ref)
             )
             results["charlie"] = charlie_result
-            self._track_usage("charlie", charlie_result)
+            self.transcript.add_round1("charlie", charlie_result["output"], charlie_result["evidence"])
         else:
             print(f"[ERROR] Charlie failed: {charlie_result['error']}")
             self.logger.log_agent_error(1, "charlie", charlie_result["error"])
@@ -218,6 +220,7 @@ class DebateCoordinator:
         self.logger.log_system_message(f"Delta (Sentiment Analyst) is searching news articles for {self.ticker}...")
         print(f"[COORDINATOR] Calling Delta for sentiment analysis...")
         delta_result = self.delta.analyze(self.ticker, days=delta_days)
+        self._track_round1_usage("delta", delta_result)
         
         if not delta_result.get("error"):
             grounding_sources = [
@@ -232,7 +235,7 @@ class DebateCoordinator:
                 metadata=self._structured_metadata(delta_result, news_analyzed=delta_result.get("news_analyzed", {}))
             )
             results["delta"] = delta_result
-            self._track_usage("delta", delta_result)
+            self.transcript.add_round1("delta", delta_result["output"], delta_result["evidence"])
         else:
             print(f"[ERROR] Delta failed: {delta_result['error']}")
             self.logger.log_agent_error(1, "delta", delta_result["error"])
@@ -241,6 +244,7 @@ class DebateCoordinator:
         self.logger.log_system_message(f"Gamma (Valuation Specialist) is calculating DCF and multiples for {self.ticker}...")
         print(f"[COORDINATOR] Calling Gamma for valuation analysis...")
         gamma_result = self.gamma.analyze(ticker=self.ticker, financials=financials)
+        self._track_round1_usage("gamma", gamma_result)
         
         if not gamma_result.get("error"):
             self.logger.log_agent_response(
@@ -273,179 +277,77 @@ class DebateCoordinator:
                 )
             
             results["gamma"] = gamma_result
-            self._track_usage("gamma", gamma_result)
+            self.transcript.add_round1("gamma", gamma_result["output"], gamma_result["evidence"])
         else:
             print(f"[ERROR] Gamma failed: {gamma_result['error']}")
             self.logger.log_agent_error(1, "gamma", gamma_result["error"])
         
         return results
     
-    def _run_round_2(self, round1_results: Dict) -> Dict:
+    def _track_round1_usage(self, agent_name: str, result: Dict):
+        # Data-source failures make no LLM call and carry no token_usage
+        if "token_usage" in result:
+            self._track_usage(agent_name, 1, result["token_usage"], ok=not result.get("error"))
+
+    def _run_round_2(self):
         """
-        Round 2: Cross-critique with agents seeing each other's Round 1 responses.
-        Delta MUST specifically comment on Charlie's data.
+        Round 2: every agent examines the other agents' claims by id, backed by its own evidence.
+        Each prompt carries the agent's own round-1 output and the others' full claims.
         """
-        results = {}
-        
-        # Prepare context from Round 1
-        context = self._prepare_round_context(round1_results)
-        
-        # Delta critiques Charlie's fundamental analysis
-        if "charlie" in round1_results and "delta" in round1_results:
-            print(f"[COORDINATOR] Delta critiquing Charlie's analysis...")
-            
-            charlie_summary = self._extract_key_points(round1_results["charlie"]["analysis"])
-            
-            critique_prompt = f"""
-In Round 1, you analyzed {self.ticker}'s sentiment from news.
-
-Charlie (Fundamental Analyst) found:
-{charlie_summary}
-
-Based on your sentiment analysis, do you agree or disagree with Charlie's fundamental assessment? 
-Does the news sentiment support or contradict the fundamental picture Charlie painted?
-Provide specific examples from the news that either validate or challenge Charlie's findings.
-
-Keep your response concise (2-3 paragraphs).
-"""
-            
-            # Generate Delta's critique using the model
-            try:
-                delta_critique = self.delta.model.generate_content(critique_prompt)
-                
-                self.logger.log_cross_critique(
-                    round_number=2,
-                    critic_agent="delta",
-                    target_agent="charlie",
-                    critique=delta_critique.text
-                )
-                
-                results["delta_critique_charlie"] = delta_critique.text
-            except Exception as e:
-                print(f"[ERROR] Delta critique failed: {e}")
-                self.logger.log_agent_error(2, "delta", str(e))
-        
-        # Charlie can respond to Delta's sentiment
-        if "delta" in round1_results and "charlie" in round1_results:
-            print(f"[COORDINATOR] Charlie responding to Delta's sentiment...")
-            
-            delta_summary = self._extract_key_points(round1_results["delta"]["analysis"])
-            
-            response_prompt = f"""
-In Round 1, you analyzed {self.ticker}'s fundamentals from SEC filings.
-
-Delta (Sentiment Analyst) found:
-{delta_summary}
-
-How does this sentiment analysis align with or contradict your fundamental findings?
-Do you see any risks or opportunities that the sentiment data highlights?
-
-Keep your response concise (2-3 paragraphs).
-"""
-            
-            try:
-                charlie_response = self.charlie.model.generate_content(response_prompt)
-                
-                self.logger.log_agent_response(
-                    round_number=2,
-                    agent_name="charlie",
-                    analysis=charlie_response.text,
-                    grounding_sources=["Round 1 fundamental analysis", "Delta's sentiment findings"],
-                    mcp_tools_used=[],
-                    metadata={"response_type": "cross_critique_response"}
-                )
-                
-                results["charlie_response"] = charlie_response.text
-            except Exception as e:
-                print(f"[ERROR] Charlie response failed: {e}")
-                self.logger.log_agent_error(2, "charlie", str(e))
-        
-        # Gamma can synthesize both perspectives
-        if "gamma" in round1_results:
-            print(f"[COORDINATOR] Gamma synthesizing fundamental and sentiment views...")
-            
-            charlie_summary = self._extract_key_points(round1_results.get("charlie", {}).get("analysis", ""))
-            delta_summary = self._extract_key_points(round1_results.get("delta", {}).get("analysis", ""))
-            
-            synthesis_prompt = f"""
-In Round 1, you provided quantitative valuation for {self.ticker}.
-
-Charlie (Fundamental): {charlie_summary}
-Delta (Sentiment): {delta_summary}
-
-Given these perspectives, do you want to adjust your valuation or risk assessment?
-Does the fundamental strength or sentiment momentum change your view?
-
-Keep your response concise (2-3 paragraphs).
-"""
-            
-            try:
-                gamma_synthesis = self.gamma.model.generate_content(synthesis_prompt)
-                
-                self.logger.log_agent_response(
-                    round_number=2,
-                    agent_name="gamma",
-                    analysis=gamma_synthesis.text,
-                    grounding_sources=["Round 1 valuation", "Charlie and Delta's findings"],
-                    mcp_tools_used=[],
-                    metadata={"response_type": "synthesis"}
-                )
-                
-                results["gamma_synthesis"] = gamma_synthesis.text
-            except Exception as e:
-                print(f"[ERROR] Gamma synthesis failed: {e}")
-                self.logger.log_agent_error(2, "gamma", str(e))
-        
-        return results
-    
-    def _run_round_3(self, round1_results: Dict, round2_results: Dict) -> Dict:
-        """
-        Round 3: Final positions after considering all perspectives.
-        """
-        results = {}
-        
-        # Each agent provides final recommendation
-        for agent_name in ["charlie", "delta", "gamma"]:
-            if agent_name not in round1_results:
+        t = self.transcript
+        for name in t.participants():
+            print(f"[COORDINATOR] {name.capitalize()} cross-examining {', '.join(t.others(name))}...")
+            agent = getattr(self, name)
+            result = generate_validated(agent.model, t.round2_prompt(name),
+                                        lambda text, n=name: t.validate_round2(n, text))
+            self._track_usage(name, 2, result.token_usage, ok=result.ok)
+            if not result.ok:
+                print(f"[ERROR] {name.capitalize()} round 2 failed: {result.error}")
+                self.logger.log_agent_error(2, name, result.error)
                 continue
-            
-            print(f"[COORDINATOR] {agent_name.capitalize()} providing final position...")
-            
-            # Get the agent
-            agent = getattr(self, agent_name)
-            
-            final_prompt = f"""
-After 2 rounds of debate about {self.ticker}, provide your final recommendation.
-
-Summarize:
-1. Your key findings
-2. How other agents' perspectives influenced your view
-3. Your final recommendation (Bullish/Neutral/Bearish)
-4. Confidence level (0-100)
-5. Key risks to watch
-
-Keep your response concise and structured.
-"""
-            
-            try:
-                final_position = agent.model.generate_content(final_prompt)
-                
-                self.logger.log_agent_response(
-                    round_number=3,
-                    agent_name=agent_name,
-                    analysis=final_position.text,
-                    grounding_sources=["Round 1 analysis", "Round 2 cross-critique"],
-                    mcp_tools_used=[],
-                    metadata={"response_type": "final_position"}
+            out = result.output
+            t.add_round2(name, out)
+            self.logger.log_agent_response(
+                round_number=2,
+                agent_name=name,
+                analysis=render_critiques(out),
+                grounding_sources=sorted({e for k in out.critiques for e in k.evidence}),
+                mcp_tools_used=[],
+                metadata={"output": out.model_dump(by_alias=True), "response_type": "cross_examination"},
+            )
+            for k in out.critiques:
+                self.logger.log_cross_critique(
+                    round_number=2, critic_agent=name, target_agent=k.target.split(".", 1)[0],
+                    critique=f"[{k.id}] {k.verdict.upper()} {k.target}: {k.argument}",
                 )
-                
-                results[f"{agent_name}_final"] = final_position.text
-            except Exception as e:
-                print(f"[ERROR] {agent_name.capitalize()} final position failed: {e}")
-                self.logger.log_agent_error(3, agent_name, str(e))
-        
-        return results
-    
+
+    def _run_round_3(self):
+        """
+        Round 3: every agent gives a final stance and states which claims or critiques changed
+        its view and what happened to each of its critiqued claims.
+        """
+        t = self.transcript
+        for name in t.participants():
+            print(f"[COORDINATOR] {name.capitalize()} providing final position...")
+            agent = getattr(self, name)
+            result = generate_validated(agent.model, t.round3_prompt(name),
+                                        lambda text, n=name: t.validate_round3(n, text))
+            self._track_usage(name, 3, result.token_usage, ok=result.ok)
+            if not result.ok:
+                print(f"[ERROR] {name.capitalize()} final position failed: {result.error}")
+                self.logger.log_agent_error(3, name, result.error)
+                continue
+            out = result.output
+            t.add_round3(name, out)
+            self.logger.log_agent_response(
+                round_number=3,
+                agent_name=name,
+                analysis=render_final(out),
+                grounding_sources=sorted(set(out.evidence_ids())),
+                mcp_tools_used=[],
+                metadata={"output": out.model_dump(by_alias=True), "response_type": "final_position"},
+            )
+
     @staticmethod
     def _structured_metadata(result: Dict, **extra) -> Dict:
         """Keep the validated output, the evidence it may cite and any data warnings in the log."""
@@ -455,23 +357,6 @@ Keep your response concise and structured.
             "warnings": result.get("warnings", []),
             **extra,
         }
-
-    def _prepare_round_context(self, round_results: Dict) -> str:
-        """Prepare context summary from previous round."""
-        context_parts = []
-        
-        for agent_name, result in round_results.items():
-            if "analysis" in result:
-                summary = self._extract_key_points(result["analysis"])
-                context_parts.append(f"{agent_name.upper()}: {summary}")
-        
-        return "\n\n".join(context_parts)
-    
-    def _extract_key_points(self, analysis: str, max_length: int = 300) -> str:
-        """Extract key points from analysis (simple truncation for now)."""
-        if len(analysis) <= max_length:
-            return analysis
-        return analysis[:max_length] + "..."
 
 
 def main():

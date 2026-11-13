@@ -229,7 +229,13 @@ class AP2Handler:
                 "agents_missing": final.get("agents_missing", []),
                 "warnings": final.get("warnings", []),
                 "reason": final.get("reason"),
+                "confidence_before_quant": final.get("confidence_before_quant"),
+                "quant_agreement": final.get("quant_agreement"),
+                "contradiction_factor": final.get("contradiction_factor"),
+                "contradictions": final.get("contradictions", []),
             },
+            # Full quant report (DESIGN.md §10), inside the signed payload
+            "quant_report": sigma_evaluation.get("quant_report"),
             "debate_log": debate_log_path,
             "timestamp": timestamp,
             "version": "AP2-v1.0"

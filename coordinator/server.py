@@ -1,9 +1,10 @@
 """
 Debate coordinator: runs the three-round debate between Charlie, Delta and Gamma.
 
-Order of a debate (PHASE4_PLAN.md §7):
-  1. fetch all data (SEC, market, news) before any LLM call;
-     stop with NO_VERDICT / INSUFFICIENT_EVIDENCE if fewer than two agents have data
+Order of a debate (PHASE4_PLAN.md §7, DESIGN.md §10):
+  1. fetch all data (SEC, market, news) before any LLM call; build the quant report once from it
+     (pure statistics, no LLM); stop with NO_VERDICT / INSUFFICIENT_EVIDENCE if fewer than two
+     agents have data
   2. round 1: independent grounded analysis
   3. circuit breaker: verify every round-1 claim in code; drop agents below the faithfulness
      floor; stop with NO_VERDICT / CIRCUIT_BREAKER_FAITHFULNESS if fewer than two remain
@@ -16,6 +17,7 @@ import os
 import sys
 import json
 import argparse
+from datetime import date
 from typing import Dict, List, Optional, Tuple, Union
 
 # Add parent directory to path
@@ -33,6 +35,7 @@ from judge.verifier import verify_output
 from mcp_server.tools.market_data import fetch_market_data
 from mcp_server.tools.news_stream import get_news_stream
 from mcp_server.tools.sec_financials import fetch_financial_statements
+from quant import QuantReport, build_quant_report, inputs_from_fetched
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -70,6 +73,7 @@ class DebateCoordinator:
         self.TOKEN_LIMIT = self.thresholds.circuit_breaker.token_limit
         self.total_tokens_used = 0
         self.warnings: List[str] = []
+        self.quant_report: Optional[QuantReport] = None
 
         self.charlie = CharlieAgent(llm_client=llm_client)
         self.delta = DeltaAgent(llm_client=llm_client)
@@ -121,6 +125,7 @@ class DebateCoordinator:
         print(f"\n[COORDINATOR] Starting {rounds}-round debate for {self.ticker}")
         try:
             fetched = self._fetch_evidence(delta_days)
+            self._build_quant_report(fetched)
             available = self._check_evidence(fetched)
             need = self.thresholds.circuit_breaker.min_valid_agents
             if len(available) < need:
@@ -181,6 +186,20 @@ class DebateCoordinator:
                 self.logger.log_system_message(f"{name} unavailable: {data.get('error')}")
         return fetched
 
+    def _build_quant_report(self, fetched: Dict[str, Dict], as_of: Optional[date] = None):
+        """Build the quant report once per debate, before round 1, and keep it in the debate log
+        under `quant_report`, separate from the transcript (DESIGN.md §10.2)."""
+        cfg = self.thresholds
+        self.quant_report = build_quant_report(
+            inputs_from_fetched(fetched["financials"], fetched["market"]), as_of or date.today(),
+            cfg.quant, cfg.capm)
+        self.logger.debate_log["quant_report"] = self.quant_report.model_dump(mode="json")
+        missing = self.quant_report.unavailable_summary()
+        self.logger.log_system_message(
+            f"Quant report built: {len(self.quant_report.fields) - len(missing)} of "
+            f"{len(self.quant_report.fields)} fields available (seed {self.quant_report.seed})")
+        self.warnings.extend(f"quant field unavailable - {m}" for m in missing)
+
     def _check_evidence(self, fetched: Dict[str, Dict]) -> List[str]:
         """Agents whose required data is present."""
         ok = {k: bool(v.get("success")) for k, v in fetched.items()}
@@ -208,7 +227,8 @@ class DebateCoordinator:
         self._record_round1("delta", r, ["get_news_stream"], news_analyzed=r.get("news_analyzed", {}))
 
         print(f"[COORDINATOR] Calling Gamma for valuation analysis...")
-        r = self.gamma.analyze(ticker=self.ticker, financials=financials, market=market)
+        r = self.gamma.analyze(ticker=self.ticker, financials=financials, market=market,
+                               quant_report=self.quant_report)
         if r.get("evidence"):
             # Keep Gamma's computed metrics for the verdict gates even if its LLM output failed
             self.transcript.set_evidence("gamma", r["evidence"])
@@ -262,7 +282,7 @@ class DebateCoordinator:
         report = {}
         for name in self.transcript.participants():
             v = verify_output(self.transcript.round1[name], self.transcript.evidence[name],
-                              self.thresholds.verification)
+                              self.thresholds.verification, self.quant_report)
             self.transcript.set_verification(name, v)
             report[name] = v.model_dump()
             if v.faithfulness < cb.min_agent_faithfulness:

@@ -40,3 +40,44 @@ hitl:
   # "approve" = also needs human approval. Never delivered as a plain success notification.
   low_confidence_action: warn
   approval_timeout_minutes: 5
+
+# Quant layer (DESIGN.md §10). Deterministic statistics; no LLM computes any of these numbers.
+quant:
+  seed: 42                       # recorded in every report; same inputs + seed = same numbers
+  returns: {window_days: 252, min_obs: 60}
+  market: {min_obs: 60}
+  forward:
+    horizon_days: 63
+    paths: 10000
+    block_length: 5              # moving-block bootstrap
+    outer_resamples: 200         # interval from resampling the history
+    outer_paths: 2000
+    min_obs: 120
+    # zero       = trend removed: log returns de-meaned, median path flat (default)
+    # historical = past year's average daily log return carried forward
+    drift_mode: zero
+  mc_dcf:
+    simulations: 10000
+    growth_clamp: [-0.05, 0.15]  # centre = historical FCF CAGR, clamped
+    growth_sd_floor: 0.02
+    growth_clip: [-0.20, 0.30]
+    discount_sd: 0.01            # around the CAPM rate; persona never enters
+    terminal_range: [0.015, 0.03]
+    min_spread: 0.02             # draws with discount - terminal < this are rejected
+  base_rate:
+    history_years: 10
+    horizon_days: 63
+    momentum_days: 126
+    momentum_band: 0.10          # similar: momentum within +/-10 percentage points
+    pe_band: 0.25                # similar: trailing PE within +/-25%
+    min_cases: 30
+  calibration:
+    path: data/calibration/pairs.csv
+    field: forward.prob_up_bootstrap
+    bins: 10
+    min_pairs: 20
+    max_brier: 0.25              # worse than a coin flip -> forward signal ignored
+  confidence:
+    agreement_weight: 0.5        # Q floor = 1 - 0.5
+    contradiction_margin: 0.05   # bullish with p < 0.45 or bearish with p > 0.55
+    contradiction_penalty: 0.5   # C floor = 1 - 0.5

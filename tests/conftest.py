@@ -158,6 +158,9 @@ class _FakeYFTicker:
         )
         self.info = (q or {}).get("info", {})
         self.news = data.get("news", {}).get(symbol, [])
+        sp = data.get("splits", {}).get(symbol, [])
+        self.splits = pd.Series([x["ratio"] for x in sp], index=pd.to_datetime([x["date"] for x in sp]),
+                                dtype=float)
 
     def history(self, period="1d", interval="1d"):
         by_period = self._data["history"].get(self.symbol, {})

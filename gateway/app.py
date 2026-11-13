@@ -309,7 +309,9 @@ async def run_analysis(session_id: str, request: AnalysisRequest):
         session["debate_log"] = debate_result["log_file"]
         
         # 3. Evaluate with Sigma
-        evaluation = sigma_agent.evaluate_debate(debate_result["log_file"], persona=request.persona.value)
+        # Sigma gets the quant report directly as a structured input, separate from the transcript
+        evaluation = sigma_agent.evaluate_debate(debate_result["log_file"], persona=request.persona.value,
+                                                 quant_report=coordinator.quant_report)
         session["evaluation"] = evaluation
         
         # 4. Generate Alpha Packet

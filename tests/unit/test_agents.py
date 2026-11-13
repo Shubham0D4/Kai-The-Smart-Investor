@@ -106,9 +106,11 @@ class TestGammaAgent:
         assert v["margin_of_safety"] is not None
         # Risk metrics ran on ~1y of daily closes
         assert r["price_count"] > 200
-        assert r["ma_200"] is not None and r["volatility_annual"] > 0
+        assert r["ma_200"] is not None
+        assert "volatility_annual" not in r          # volatility now comes from the quant report
         prompt = schema_llm.calls[0]
-        for eid in ("mkt:price", "calc:dcf.value_per_share", "calc:volatility_annual", "calc:fcf:FY2026"):
+        for eid in ("mkt:price", "calc:dcf.value_per_share", "quant:returns.vol_annual",
+                    "quant:mc_dcf.fair_value_p50", "quant:forward.prob_up_bootstrap", "calc:fcf:FY2026"):
             assert f"[{eid}]" in prompt
 
     def test_no_user_supplied_inputs(self):
@@ -220,4 +222,4 @@ class TestPersonaFreeAgents:
         assert evidence["zen"] == evidence["balanced"] == evidence["alpha"]
         assert params["zen"] == params["balanced"] == params["alpha"]
         rate = {e["id"]: e for e in evidence["zen"]}["assumption:discount_rate"]
-        assert rate["source"].startswith("computed: CAPM")
+        assert "quant:capm.discount_rate" in rate["source"]

@@ -93,7 +93,8 @@ def test_j1_full_debate_all_claims_true(debate):
     assert ev["evaluation"]["integrity_score"] == 100.0
     fr = ev["final_recommendation"]
     assert fr["recommendation"] == "Sell"                  # S = -0.80 <= zen sell threshold -0.20
-    assert fr["confidence"] == pytest.approx(80.0)
+    assert fr["confidence_before_quant"] == pytest.approx(80.0)
+    assert fr["confidence"] == pytest.approx(80.0 * fr["quant_agreement"] * fr["contradiction_factor"], abs=0.01)
     assert fr["supporting_points"] and fr["key_risks"] == ["charlie: canned risk"]
     assert len(s_llm.calls) == 1 and fr["analysis"] == "Narrative explaining the verdict."
 
@@ -196,7 +197,7 @@ def test_j6_token_limit_in_round_2(debate):
 def favourable_gates(monkeypatch):
     """Pretend Gamma's DCF showed a 30% margin of safety and 25% volatility."""
     def set_gates(mos=0.30, vol=0.25):
-        monkeypatch.setattr(SigmaAgent, "gate_inputs", staticmethod(lambda t: (mos, vol)))
+        monkeypatch.setattr(SigmaAgent, "gate_inputs", staticmethod(lambda t, r=None: (mos, vol)))
     return set_gates
 
 
@@ -205,7 +206,7 @@ def test_j7_narrative_cannot_change_the_verdict(debate, favourable_gates):
     _, result, _ = debate(stance="bullish", confidence=80)
     s, _ = sigma("STRONG SELL. Dump the stock immediately.")
     fr = s.evaluate_debate(result["log_file"], persona="zen")["final_recommendation"]
-    assert fr["recommendation"] == "Buy" and fr["confidence"] == pytest.approx(80.0)
+    assert fr["recommendation"] == "Buy" and fr["confidence_before_quant"] == pytest.approx(80.0)
 
 
 def test_j8_narrative_failure_keeps_verdict(debate, favourable_gates):
@@ -217,7 +218,7 @@ def test_j8_narrative_failure_keeps_verdict(debate, favourable_gates):
     s = SigmaAgent(llm_client=FakeLLMClient(responses=boom))
     fr = s.evaluate_debate(result["log_file"], persona="zen")["final_recommendation"]
     assert fr["recommendation"] == "Buy"
-    assert fr["analysis"].startswith("Verdict: Buy, confidence 80")
+    assert fr["analysis"].startswith(f"Verdict: Buy, confidence {fr['confidence']:.0f}")
     assert any("narrative unavailable" in w for w in fr["warnings"])
 
 
@@ -248,8 +249,8 @@ def gateway_run(monkeypatch, make_responder, tmp_path):
         real = SigmaAgent(llm_client=FakeLLMClient(responses="Narrative."))
 
         class Forced:
-            def evaluate_debate(self, path, persona=None):
-                ev = real.evaluate_debate(path, persona=persona)
+            def evaluate_debate(self, path, persona=None, quant_report=None):
+                ev = real.evaluate_debate(path, persona=persona, quant_report=quant_report)
                 if force:
                     ev["final_recommendation"].update(force)
                 return ev

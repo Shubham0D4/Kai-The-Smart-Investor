@@ -5,6 +5,9 @@ Sigma computes everything in code from the saved debate transcript:
   faithfulness  - claims re-checked against the fetched data (judge/verifier.py)
   integrity     - critiques answered, failed claims fixed, stance changes explained (judge/scoring.py)
   verdict       - debate score S against the persona's thresholds (judge/scoring.py)
+It also receives the quant report (quant/, DESIGN.md §10) as a separate structured input: the
+volatility gate reads it, `quant:` claims are verified against it, and it lowers a Buy/Sell
+confidence (agreement Q, contradictions C) without ever changing the recommendation.
 Its result is a pydantic-validated object (SigmaEvaluation). The LLM is called once, only to
 write a plain-language explanation of the verdict; its reply is never parsed for a verdict.
 """
@@ -13,7 +16,7 @@ import os
 import sys
 import json
 import argparse
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -25,9 +28,10 @@ from coordinator.personas import get_sigma_system_instruction
 from coordinator.transcript import Transcript
 from coordinator.llm_client import MultiLLMClient
 from judge.scoring import (
-    AgentIntegrity, Gate, Verdict, agent_integrity, collect_key_risks, collect_supporting_points,
-    decide_verdict, no_verdict, overall_integrity,
+    AgentIntegrity, Contradiction, Gate, Verdict, agent_integrity, apply_quant, collect_key_risks,
+    collect_supporting_points, decide_verdict, no_verdict, overall_integrity, quant_signals,
 )
+from quant.models import QuantReport
 from judge.verifier import AgentVerification, overall_faithfulness, verify_output
 from dotenv import load_dotenv
 
@@ -56,6 +60,11 @@ class FinalRecommendation(BaseModel):
     warnings: List[str]
     reason: Optional[str] = None
     analysis: str
+    confidence_before_quant: Optional[float] = None
+    quant_agreement: Optional[float] = None
+    contradiction_factor: Optional[float] = None
+    quant_signals: Dict[str, float] = {}
+    contradictions: List[Contradiction] = []
 
     @model_validator(mode="after")
     def _confidence_only_for_actions(self):
@@ -79,6 +88,7 @@ class SigmaEvaluation(BaseModel):
     verification: Dict[str, AgentVerification]
     integrity: Dict[str, AgentIntegrity]
     verdicts_by_persona: Dict[str, Verdict]
+    quant_report: Optional[QuantReport] = None
     metadata: Dict[str, Any]
 
 
@@ -98,11 +108,12 @@ class SigmaAgent:
     def cfg(self) -> Thresholds:
         return self.thresholds or load_thresholds()
 
-    def score_debate(self, transcript: Transcript) -> Dict:
-        """Deterministic scores on each agent's latest output. No LLM call."""
+    def score_debate(self, transcript: Transcript, quant_report: Optional[QuantReport] = None) -> Dict:
+        """Deterministic scores on each agent's latest output. No LLM call. `quant:` evidence is
+        resolved against the quant report."""
         cfg = self.cfg
         finals = transcript.final_outputs()
-        verifications = {a: verify_output(out, transcript.evidence.get(a, []), cfg.verification)
+        verifications = {a: verify_output(out, transcript.evidence.get(a, []), cfg.verification, quant_report)
                          for a, out in finals.items()}
         integrity = {a: agent_integrity(a, transcript, transcript.verification.get(a), cfg.integrity)
                      for a in finals}
@@ -116,19 +127,28 @@ class SigmaAgent:
         }
 
     @staticmethod
-    def gate_inputs(transcript: Transcript) -> Tuple[Optional[float], Optional[float]]:
-        """Margin of safety and annualised volatility from Gamma's computed evidence."""
+    def gate_inputs(transcript: Transcript,
+                    quant_report: Optional[QuantReport] = None) -> Tuple[Optional[float], Optional[float]]:
+        """Margin of safety from Gamma's point DCF; annualised volatility from the quant report."""
         records = {e.id: e.value for e in transcript.evidence.get("gamma", [])}
-        return records.get("calc:dcf.margin_of_safety"), records.get("calc:volatility_annual")
+        vol = quant_report.value("quant:returns.vol_annual") if quant_report is not None else None
+        return records.get("calc:dcf.margin_of_safety"), vol
 
-    def evaluate_debate(self, debate_log_path: str, persona: Optional[str] = None) -> Dict:
+    def evaluate_debate(self, debate_log_path: str, persona: Optional[str] = None,
+                        quant_report: Optional[Union[QuantReport, Dict]] = None) -> Dict:
         """
         Score a completed debate log and decide the verdict for `persona` (default: the log's).
-        Returns SigmaEvaluation as a validated, JSON-serialisable dict.
+        `quant_report` is the coordinator's report, passed directly; when omitted it is read from
+        the log's `quant_report` entry and validated. Returns SigmaEvaluation as a validated,
+        JSON-serialisable dict.
         """
         with open(debate_log_path) as f:
             log = json.load(f)
         cfg = self.cfg
+        if quant_report is None and log.get("quant_report"):
+            quant_report = log["quant_report"]
+        if isinstance(quant_report, dict):
+            quant_report = QuantReport.model_validate(quant_report)
         transcript = Transcript.from_dict(log.get("transcript") or {}, log.get("ticker", ""))
         persona_name = persona or log.get("persona") or "balanced"
         if persona_name == "sigma":      # old logs
@@ -136,15 +156,17 @@ class SigmaAgent:
         outcome = log.get("outcome") or {}
         warnings = list(outcome.get("warnings", []))
 
-        sc = self.score_debate(transcript)
-        mos, vol = self.gate_inputs(transcript)
+        sc = self.score_debate(transcript, quant_report)
+        mos, vol = self.gate_inputs(transcript, quant_report)
+        signals, signal_warnings = quant_signals(quant_report, cfg.quant)
 
         def verdict_for(p: str) -> Verdict:
             if outcome.get("status") == "NO_VERDICT":
                 return no_verdict(f"{outcome.get('reason')}: {outcome.get('detail')}",
                                   warnings=warnings)
-            return decide_verdict(sc["finals"], sc["faithfulness_by_agent"], sc["integrity"], mos, vol,
-                                  cfg.persona(p), cfg, warnings=warnings)
+            v = decide_verdict(sc["finals"], sc["faithfulness_by_agent"], sc["integrity"], mos, vol,
+                               cfg.persona(p), cfg, warnings=warnings)
+            return apply_quant(v, sc["finals"], signals, signal_warnings, cfg.quant)
 
         verdict = verdict_for(persona_name)
         supporting = collect_supporting_points(sc["finals"], sc["verifications"], verdict)
@@ -164,17 +186,21 @@ class SigmaAgent:
                 supporting_points=supporting, key_risks=risks, gates=verdict.gates,
                 agents_valid=verdict.agents_valid, agents_missing=verdict.agents_missing,
                 warnings=all_warnings, reason=verdict.reason, analysis=analysis,
+                confidence_before_quant=verdict.confidence_before_quant,
+                quant_agreement=verdict.quant_agreement, contradiction_factor=verdict.contradiction_factor,
+                quant_signals=verdict.quant_signals, contradictions=verdict.contradictions,
             ),
             verification=sc["verifications"],
             integrity=sc["integrity_by_agent"],
             verdicts_by_persona={p: verdict_for(p) for p in PERSONAS},
+            quant_report=quant_report,
             metadata={
                 "rounds_evaluated": len(log.get("rounds", [])),
                 "agents_evaluated": list(sc["finals"]),
                 "outcome": outcome,
             },
         )
-        return result.model_dump()
+        return result.model_dump(mode="json")
 
     def write_narrative(self, verdict: Verdict, transcript: Transcript,
                         supporting: List[str], risks: List[str]) -> Tuple[str, Optional[str]]:
@@ -193,6 +219,8 @@ Verdict: {verdict.recommendation}
 Confidence: {conf}
 Debate score S: {verdict.score:+.2f}
 Gates: {'; '.join(g.note for g in verdict.gates)}
+Quant report adjustment: agreement Q = {verdict.quant_agreement}, contradiction factor C = {verdict.contradiction_factor}
+Contradictions with the quant report: {'; '.join(f"{x.agent} is {x.stance} but {x.field} = {x.value:.2f}" for x in verdict.contradictions) or 'none'}
 Agents counted: {', '.join(verdict.agents_valid)}; missing or excluded: {', '.join(verdict.agents_missing) or 'none'}
 Verified supporting points:
 {chr(10).join('- ' + p for p in supporting) or '- none'}

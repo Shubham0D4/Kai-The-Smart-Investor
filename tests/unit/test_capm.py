@@ -49,7 +49,8 @@ def test_capm_formula_and_clamps():
 def test_gamma_uses_capm_from_fixtures():
     computed = GammaAgent(llm_client=object()).compute(fetch_financial_statements("AAPL"), fetch_market_data("AAPL"))
     ev = {e.id: e for e in computed["evidence"]}
-    beta, rf = ev["calc:beta"].value, ev["mkt:risk_free_rate"].value
+    beta, rf = ev["quant:market.beta"].value, ev["mkt:risk_free_rate"].value
+    assert "calc:beta" not in ev                  # one source for beta: the quant report
     assert rf == pytest.approx(0.05103, abs=1e-5)
     assert ev["assumption:discount_rate"].value == pytest.approx(rf + beta * 0.05, abs=1e-6)
     assert computed["parameters"]["discount_rate"] == ev["assumption:discount_rate"].value

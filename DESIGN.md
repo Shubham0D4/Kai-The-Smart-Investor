@@ -168,3 +168,157 @@ unaffected: three agents, three rounds, in one process.
 - With no DCF the best verdict is Hold, even for Alpha. Is that the intended reading of
   "count valid and required"?
 - Is "majority wins" meant for conflicting article metadata, as written, or for sentiment?
+
+## 10. Quant layer (phase 4.5)
+
+A deterministic statistics module, `quant/`, built from data already fetched (two years of
+daily closes for the stock and the S&P 500, SEC fundamentals, price, CAPM inputs). Pure
+functions: numpy, scipy, statsmodels; no network and no LLM. Every random draw takes a seed;
+the seed is recorded in the report. No LLM computes any number in it.
+
+### 10.1 Output schema
+
+`build_quant_report(inputs, as_of, cfg, seed) -> QuantReport` (pydantic). Every field is a
+`QuantField`:
+
+| Key | Meaning |
+|---|---|
+| `id` | Evidence ID, e.g. `quant:forward.prob_up_bootstrap` |
+| `status` | `ok` or `unavailable` |
+| `value`, `unit` | Number and unit (`ratio`, `USD`, `x`); null when unavailable |
+| `interval` | `[low, high]` and its level (e.g. 0.90) where one exists |
+| `n`, `n_kind` | Sample size and what it counts: `observations`, `simulations` or `cases` |
+| `kind` | `descriptive` (summarises the past), `model` (follows from stated assumptions) or `prediction` (a probability about the future) |
+| `method` | One line, e.g. "moving-block bootstrap, block 5, 10,000 paths" |
+| `reason` | Why it is unavailable; never a default number in its place |
+
+The report also records `as_of`, `seed`, the input windows and the first and last input dates.
+
+| Group | Fields | Kind | Unavailable when |
+|---|---|---|---|
+| a. returns (last 252 days) | `vol_annual` (sample std × √252), `skew`, `excess_kurtosis`, `max_drawdown`, `var95_hist` (1-day), `var95_normal` (1-day) | descriptive; `var95_normal` model | < 60 returns |
+| b. market (2y, common dates) | `beta`, `beta_se`, `correlation`, `alpha_daily` (OLS of stock on S&P 500 daily returns) | descriptive | < 60 common days or no benchmark |
+| c. mc_dcf | `fair_value_p10/p50/p90`, `prob_fair_above_price` | model | < 2 FCF years, latest FCF ≤ 0, no shares, no CAPM rate |
+| d. forward (horizon 63 days) | `prob_up_bootstrap` with 90% interval; `prob_up_normal` with 90% interval; `return_p5/p50/p95` | prediction | < 120 returns |
+| e. base_rate | `share_up` with Wilson 95% interval, `n` | descriptive of past, used as a prior | fewer than 30 similar cases |
+| f. calibration | `brier`, `reliability` table (10 bins: n, mean stated, observed share) | descriptive of our past forecasts | fewer than 20 recorded pairs |
+
+Method details
+- **Returns:** simple daily returns. VaR is reported as a positive loss fraction. Historical VaR
+  = −5th percentile; normal VaR = −(μ − 1.645σ). Max drawdown = min over t of
+  P_t / max_{s≤t} P_s − 1.
+- **Market:** beta and its classical OLS standard error come from statsmodels.
+  This beta replaces the cov/var beta Gamma computes today, so there is one source.
+- **MC DCF:** 10,000 draws, each run through the same 5-year DCF as Gamma, with net debt
+  subtracted.
+  - Growth ~ Normal(historical FCF CAGR clamped to [−5%, 15%], sd of annual FCF growth with a
+    2% floor), clipped to [−20%, 30%].
+  - Discount rate ~ Normal(CAPM rate, 1%), clipped to [6%, 15%]. It never depends on persona.
+  - Terminal growth ~ Uniform(1.5%, 3.0%).
+  - Draws with discount − terminal < 2% are rejected; `n` reports the draws kept.
+- **Forward, bootstrap:** moving-block bootstrap of the last 252 daily returns (block 5, so
+  short runs of dependence are kept), 10,000 paths of 63 days. P(up) = share of paths ending
+  above today. The 90% interval comes from an outer bootstrap: 200 resamples of the history,
+  2,000 paths each. It reflects the uncertainty from having only one year of data.
+- **Forward, normal:** log returns, P(up) = Φ(√N · μ̂ / σ̂). The interval comes from
+  μ̂ ± 1.645 σ̂/√n. Both forward methods carry the past year's drift forward, which is the main
+  assumption in this group.
+- **Base rates:** the function takes any case table `{date, trailing_pe, momentum_126d,
+  forward_return}`. A case is "similar" when its momentum is within ±10 points and its PE
+  within ±25% of today's. The report builds the table from the stock's own history using
+  non-overlapping 63-day windows, so cases are not double-counted. With two years of data this
+  gives roughly six cases, so the field will normally say "insufficient data" (see 10.6).
+- **Calibration:** reads `data/calibration/pairs.csv` written by
+  `scripts/calibration_backtest.py`. Brier = mean((p − outcome)²); 0.25 is a coin flip.
+
+### 10.2 How Gamma cites it
+
+The coordinator builds the report once, after fetching data and before round 1, and stores it
+in the debate log under `quant_report`, separate from `transcript`. Gamma's evidence list gains
+one record per `ok` field (ID `quant:…`, value, unit, `n` and method in the source line).
+Unavailable fields are listed by name and reason only, with no value, so they cannot be cited
+as numbers. The volatility and beta Gamma computes today are removed: Gamma cites
+`quant:returns.vol_annual` and `quant:market.beta`, and its CAPM rate uses the report's beta.
+
+The verifier resolves every `quant:` ID against the stored report, not against Gamma's copy.
+- An ID that is not in the report fails `unknown_evidence`.
+- An ID that exists but is unavailable fails `no_value`.
+- A stated number that differs fails `value_mismatch`.
+- The wording check applies as before.
+So a Gamma claim with a number the report does not contain fails, and lowers its faithfulness.
+
+### 10.3 How Sigma receives it
+
+`SigmaAgent.evaluate_debate(log_path, persona, quant_report=None)`. The gateway passes the
+report as a `QuantReport`; when it is omitted, Sigma loads `quant_report` from the log and
+validates it. Sigma reads it as structured input, never through agent text.
+
+Gates
+- **Volatility:** reads `quant:returns.vol_annual` instead of Gamma's figure.
+- **Margin of safety:** stays on Gamma's point-estimate DCF.
+
+The report never changes the debate score S or Buy/Hold/Sell; it only lowers confidence and
+adds flags. Model outputs rest on strong assumptions, so they temper the agents' verdict rather
+than drive it.
+
+### 10.4 Effect on confidence
+
+Phase 4: `confidence = 100 × |S| × integrity × coverage` (Buy/Sell only). Phase 4.5 multiplies
+in two factors, each between 0.5 and 1:
+
+    confidence = 100 × |S| × integrity × coverage × Q × C
+
+**Q, agreement with the report.** Signals: `prob_up_bootstrap`, `prob_fair_above_price`, and
+`share_up` when available. For each available signal p, with d = +1 for Buy and −1 for Sell:
+
+    a = d × 2 × (p − 0.5)                 # −1 = fully against the verdict, +1 = fully for it
+    Q = 1 − 0.5 × mean(max(−a, 0))        # only disagreement counts, agreement never boosts
+
+No signals available → Q = 1, with a warning. If calibration is available and its Brier score
+is above 0.25 (worse than a coin flip), the forward signal is left out of Q, with a warning.
+
+**C, agent contradictions.** For each valid agent, a contradiction is:
+- bullish with any signal p < 0.45, or
+- bearish with any signal p > 0.55.
+
+The 0.05 margin avoids flagging 49% against 51%. Every contradiction is listed in the verdict
+as `{agent, stance, field, value}`, for Hold as well.
+
+    C = 1 − 0.5 × (valid agents with at least one contradiction ÷ valid agents)
+
+Example: Buy at S = 0.80 with full integrity and coverage gives 80. If `prob_up_bootstrap` is
+0.40 and `prob_fair_above_price` is 0.30, then a = −0.2 and −0.4, so Q = 1 − 0.5 × 0.3 = 0.85.
+If all three agents are bullish, all contradict, so C = 0.5. Confidence = 80 × 0.85 × 0.5 = 34,
+which falls below the 60 approval line, so HITL sends a low-confidence warning.
+
+All constants live in `config/thresholds.yaml` under `quant`: seed, simulation counts, horizon,
+block length, minimum samples, DCF distribution parameters, contradiction margin and penalties.
+
+### 10.5 Alpha packet and look-ahead
+
+- **Alpha packet:** carries the full report under `quant_report`, inside the signed payload.
+- **Look-ahead:** `build_quant_report` takes `as_of` and raises if any input row is dated after
+  it. The backtest script uses the same check.
+
+### 10.6 Decisions taken (owner's answers) and details settled while building
+
+1. **Ten years of closes are fetched** for base rates. On the AAPL fixtures this still gives only
+   7 similar cases out of 37 non-overlapping windows, so the field reports "insufficient data"
+   (minimum 30). That is the honest answer for one stock's own history.
+2. **Trend removed by default** (`quant.forward.drift_mode: zero`): log returns are de-meaned,
+   so the median path is flat. With this setting the normal-model probability is exactly 0.5 by
+   construction, and the bootstrap probability differs from 0.5 only through skew, fat tails
+   and short-run dependence. `drift_mode: historical` switches both methods to carrying the
+   past year's drift forward.
+3. **Floors approved:** Q and C each have a floor of 0.5, and the contradiction margin is 0.05.
+4. **Split adjustment.** yfinance closes are split-adjusted but SEC EPS is as first reported, so
+   each EPS is divided by the stock splits dated after its filing (AAPL FY2019: $11.89 / 4).
+   EPS is taken as first reported, dated by its filing date, so trailing P/E uses only what
+   was known at each date.
+5. **One source per number.** Beta, the CAPM rate and annualised volatility now exist only in
+   the report. Gamma's point DCF uses `quant:capm.discount_rate`; Sigma's volatility gate uses
+   `quant:returns.vol_annual`.
+6. **The backtest scores only price-rise forecasts:** `forward.prob_up_bootstrap`,
+   `forward.prob_up_normal` and `base_rate.share_up`. `mc_dcf.prob_fair_above_price` is a
+   statement about value under assumptions, not a forecast of the price, so it is not scored
+   against price moves.

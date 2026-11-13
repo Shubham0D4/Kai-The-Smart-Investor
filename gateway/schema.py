@@ -123,6 +123,7 @@ class AlphaPacket(BaseModel):
     debate_summary: DebateSummary
     key_risks: List[str]
     verdict_detail: Optional[Dict[str, Any]] = Field(None, description="Score, gates, supporting points, warnings")
+    quant_report: Optional[Dict[str, Any]] = Field(None, description="Deterministic quant layer report (signed)")
     debate_log: str
     timestamp: str
     signature: str

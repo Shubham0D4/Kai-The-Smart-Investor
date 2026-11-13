@@ -18,12 +18,17 @@ counted as checkable.
 
 import html
 import re
-from typing import Dict, Iterable, List, Optional, Set
+from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Set
 
 from pydantic import BaseModel
 
 from agents.schema import AgentOutput, EvidenceRecord, InferenceClaim, NumericClaim, QuoteClaim
 from coordinator.config import VerificationConfig
+
+if TYPE_CHECKING:
+    from quant.models import QuantReport
+
+QUANT_PREFIX = "quant:"
 
 
 class ClaimCheck(BaseModel):
@@ -223,9 +228,22 @@ def verify_inference(claim: InferenceClaim, checks: Dict[str, ClaimCheck],
 
 # --------------------------------------------------------------------------- whole output
 
-def verify_output(output: AgentOutput, evidence: List[EvidenceRecord],
-                  cfg: VerificationConfig) -> AgentVerification:
-    by_id = {e.id: e for e in evidence}
+def resolve_evidence(evidence: List[EvidenceRecord],
+                     quant_report: Optional["QuantReport"] = None) -> Dict[str, EvidenceRecord]:
+    """Evidence by id. With a quant report, every `quant:` id is resolved against the report
+    itself (the agent's own copies are ignored), and unavailable fields resolve to a record with
+    no value, so citing them fails with `no_value`; ids the report lacks fail `unknown_evidence`."""
+    if quant_report is None:
+        return {e.id: e for e in evidence}
+    by_id = {e.id: e for e in evidence if not e.id.startswith(QUANT_PREFIX)}
+    for rec in quant_report.evidence_records(include_unavailable=True):
+        by_id[rec["id"]] = EvidenceRecord(**rec)
+    return by_id
+
+
+def verify_output(output: AgentOutput, evidence: List[EvidenceRecord], cfg: VerificationConfig,
+                  quant_report: Optional["QuantReport"] = None) -> AgentVerification:
+    by_id = resolve_evidence(evidence, quant_report)
     claims = {c.id: c for c in output.claims}
     tol = cfg.numeric_tolerance
     checks: Dict[str, ClaimCheck] = {}

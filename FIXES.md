@@ -27,6 +27,17 @@
 - [x] B10 Tests need live API keys; mcp_config.json has a hardcoded local path;
        README clone URL is wrong.
 
+## Statistics (phase 4.5)
+- [x] Q1 Add a deterministic quant layer (quant/): return distribution, beta/correlation,
+      Monte Carlo DCF, forward probability (bootstrap + normal), base rates, calibration.
+- [x] Q2 Gamma cites quant fields by id; the verifier resolves `quant:` ids against the report.
+- [x] Q3 Sigma takes the report as structured input; confidence x Q x C; contradictions flagged.
+- [x] Q4 Alpha packet carries the signed report.
+- [ ] Q5 Run scripts/calibration_backtest.py (live) so calibration stops being "unavailable".
+- [ ] Q6 Base rates need a cross-sectional case table; one stock's 10-year history gives too few
+      similar cases (7 of 37 for AAPL).
+- [ ] Q7 Frontend does not show the quant report, Q/C factors or contradictions yet.
+
 ## Rules for every session
 - One phase = one branch = one PR. Do not touch other phases.
 - Tests must pass offline (no API keys, no network).
@@ -131,3 +142,15 @@ Still open / found:
   warnings banner; the frontend was not built or run (no node_modules here).
 - Existing alpha_packets/*.json use the old schema and the burned key.
 - The wording check only sees numbers with a $, %, x or scale marker.
+
+## Phase 4.5 (branch phase-4.5-quant) notes
+- quant/ is pure (numpy, scipy, statsmodels); seeded; every field has value, unit, n and kind,
+  or an explicit "unavailable" with a reason. Built once per debate before round 1.
+- Beta, CAPM rate and annualised volatility now come only from the report (Gamma's own beta
+  and volatility calculations were removed).
+- Fixtures: 10y AAPL closes, AAPL split history, full first-reported diluted-EPS history.
+- Found: the test venv had drifted to pandas 3.1 / numpy 2.2 (unpinned transitive installs),
+  which breaks statsmodels 0.14.4. The venv is now on the pinned pandas 2.2.0 / numpy 1.26.0;
+  any environment must install from requirements.txt to match.
+- Found: AAPL's Monte Carlo DCF gives P(fair value > price) = 0.06, so bullish agents are
+  flagged as contradicting the report on every fixture run.

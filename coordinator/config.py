@@ -69,6 +69,69 @@ class HitlConfig(_Strict):
     approval_timeout_minutes: int = Field(gt=0)
 
 
+class QuantReturnsConfig(_Strict):
+    window_days: int = Field(ge=20)
+    min_obs: int = Field(ge=10)
+
+
+class QuantMarketConfig(_Strict):
+    min_obs: int = Field(ge=10)
+
+
+class QuantForwardConfig(_Strict):
+    horizon_days: int = Field(ge=1)
+    paths: int = Field(ge=100)
+    block_length: int = Field(ge=1)
+    outer_resamples: int = Field(ge=10)
+    outer_paths: int = Field(ge=100)
+    min_obs: int = Field(ge=20)
+    drift_mode: Literal["zero", "historical"] = "zero"
+
+
+class QuantMcDcfConfig(_Strict):
+    simulations: int = Field(ge=100)
+    growth_clamp: Tuple[float, float]
+    growth_sd_floor: float = Field(ge=0)
+    growth_clip: Tuple[float, float]
+    discount_sd: float = Field(ge=0)
+    terminal_range: Tuple[float, float]
+    min_spread: float = Field(gt=0)
+
+
+class QuantBaseRateConfig(_Strict):
+    history_years: int = Field(ge=1)
+    horizon_days: int = Field(ge=1)
+    momentum_days: int = Field(ge=1)
+    momentum_band: float = Field(gt=0)
+    pe_band: float = Field(gt=0)
+    min_cases: int = Field(ge=1)
+
+
+class QuantCalibrationConfig(_Strict):
+    path: str
+    field: str
+    bins: int = Field(ge=2)
+    min_pairs: int = Field(ge=1)
+    max_brier: float = Field(gt=0, le=1)
+
+
+class QuantConfidenceConfig(_Strict):
+    agreement_weight: float = Field(ge=0, le=1)
+    contradiction_margin: float = Field(ge=0, lt=0.5)
+    contradiction_penalty: float = Field(ge=0, le=1)
+
+
+class QuantConfig(_Strict):
+    seed: int
+    returns: QuantReturnsConfig
+    market: QuantMarketConfig
+    forward: QuantForwardConfig
+    mc_dcf: QuantMcDcfConfig
+    base_rate: QuantBaseRateConfig
+    calibration: QuantCalibrationConfig
+    confidence: QuantConfidenceConfig
+
+
 class Thresholds(_Strict):
     personas: Dict[Literal["zen", "balanced", "alpha"], PersonaThresholds]
     verification: VerificationConfig
@@ -76,6 +139,7 @@ class Thresholds(_Strict):
     integrity: IntegrityConfig
     capm: CapmConfig
     hitl: HitlConfig
+    quant: QuantConfig
 
     @model_validator(mode="after")
     def _all_personas(self):

@@ -71,11 +71,15 @@ def _days(start: str, end: str) -> int:
     return (date.fromisoformat(end) - date.fromisoformat(start)).days
 
 
-def _annual_facts(concept: Dict, unit: str, kind: str) -> Dict[str, Dict]:
-    """end date -> the most recently filed 10-K fact for that period."""
+def _annual_facts(concept: Dict, unit: str, kind: str, as_of: Optional[str] = None,
+                  first_reported: bool = False) -> Dict[str, Dict]:
+    """end date -> the most recently filed (or, with first_reported, the earliest filed) 10-K fact
+    for that period. With as_of (ISO date), facts filed after it are ignored (no look-ahead)."""
     out: Dict[str, Dict] = {}
     for f in concept.get("units", {}).get(unit, []):
         if f.get("form") != "10-K":
+            continue
+        if as_of and f.get("filed", "") > as_of:
             continue
         if kind == "duration":
             if "start" not in f or not 340 <= _days(f["start"], f["end"]) <= 380:
@@ -83,7 +87,8 @@ def _annual_facts(concept: Dict, unit: str, kind: str) -> Dict[str, Dict]:
         elif "start" in f:
             continue
         prev = out.get(f["end"])
-        if prev is None or f.get("filed", "") > prev.get("filed", ""):
+        newer = f.get("filed", "") > (prev or {}).get("filed", "")
+        if prev is None or (newer != first_reported and f.get("filed", "") != prev.get("filed", "")):
             out[f["end"]] = f
     return out
 
@@ -100,11 +105,13 @@ def _record(metric: str, fact: Dict, cik: str, concept: str) -> Dict:
         "period": f"{fact.get('start', '')}..{fact['end']}".lstrip("."),
         "source": f"SEC XBRL {concept}, {fact.get('form', '')} filed {fact.get('filed', '')} (accn {accn})",
         "url": ARCHIVE_URL.format(cik=int(cik), accn_nodash=accn.replace("-", "")) if accn else None,
+        "filed": fact.get("filed"),
     }
 
 
-def parse_company_facts(facts: Dict, cik: str, years: int = YEARS) -> Dict:
-    """Pure function: companyfacts JSON -> evidence records. Raises SECDataError if unusable."""
+def parse_company_facts(facts: Dict, cik: str, years: int = YEARS, as_of: Optional[str] = None) -> Dict:
+    """Pure function: companyfacts JSON -> evidence records. Raises SECDataError if unusable.
+    With as_of (ISO date) only facts filed on or before that date are used."""
     gaap = facts.get("facts", {}).get("us-gaap", {})
     if not gaap:
         raise SECDataError("company facts contain no us-gaap data")
@@ -114,14 +121,14 @@ def parse_company_facts(facts: Dict, cik: str, years: int = YEARS) -> Dict:
         merged: Dict[str, Tuple[Dict, str]] = {}
         for concept in concepts:  # earlier concepts win; later ones fill gaps
             if concept in gaap:
-                for end, f in _annual_facts(gaap[concept], unit, kind).items():
+                for end, f in _annual_facts(gaap[concept], unit, kind, as_of).items():
                     merged.setdefault(end, (f, concept))
         per_metric[metric] = merged
 
     # Fallback for long-term debt: noncurrent + current when the total is not tagged
     if "LongTermDebtNoncurrent" in gaap and "LongTermDebtCurrent" in gaap:
-        nc = _annual_facts(gaap["LongTermDebtNoncurrent"], "USD", "instant")
-        cur = _annual_facts(gaap["LongTermDebtCurrent"], "USD", "instant")
+        nc = _annual_facts(gaap["LongTermDebtNoncurrent"], "USD", "instant", as_of)
+        cur = _annual_facts(gaap["LongTermDebtCurrent"], "USD", "instant", as_of)
         for end in set(nc) & set(cur):
             if end not in per_metric["long_term_debt"]:
                 f = dict(nc[end]); f["val"] = nc[end]["val"] + cur[end]["val"]
@@ -142,7 +149,7 @@ def parse_company_facts(facts: Dict, cik: str, years: int = YEARS) -> Dict:
 
     # Current shares outstanding from the cover page (dei)
     dei = facts.get("facts", {}).get("dei", {}).get("EntityCommonStockSharesOutstanding", {})
-    share_facts = dei.get("units", {}).get("shares", [])
+    share_facts = [f for f in dei.get("units", {}).get("shares", []) if not as_of or f.get("filed", "") <= as_of]
     if share_facts:
         latest = max(share_facts, key=lambda f: (f["end"], f.get("filed", "")))
         records.append({
@@ -153,11 +160,20 @@ def parse_company_facts(facts: Dict, cik: str, years: int = YEARS) -> Dict:
             "period": latest["end"],
             "source": f"SEC XBRL dei:EntityCommonStockSharesOutstanding, {latest.get('form', '')} filed {latest.get('filed', '')}",
             "url": None,
+            "filed": latest.get("filed"),
         })
+
+    # Every annual diluted EPS as FIRST reported, with its filing date (for trailing PE at past
+    # dates without look-ahead). Values are on the share basis of the filing date.
+    eps_first = _annual_facts(gaap.get("EarningsPerShareDiluted", {}), "USD/shares", "duration",
+                              as_of, first_reported=True)
+    eps_history = [{"end": end, "filed": f.get("filed"), "value": float(f["val"])}
+                   for end, f in sorted(eps_first.items())]
 
     return {
         "fiscal_years": [_fiscal_label(e) for e in fy_ends],
         "records": records,
+        "eps_history": eps_history,
     }
 
 
@@ -184,6 +200,31 @@ def fetch_financial_statements(ticker: str, years: int = YEARS) -> Dict:
                 "error": f"SEC request failed: HTTP {e.response.status_code} for {e.request.url}"}
     except (httpx.HTTPError, SECDataError, ValueError, KeyError) as e:
         return {"success": False, "ticker": ticker.upper(), "error": f"SEC financial data unavailable: {e}"}
+
+
+def fcf_history(records: List[Dict]) -> List[Dict]:
+    """Free cash flow per fiscal year = operating cash flow - capex (oldest first).
+    [{fy, value, filed, ocf_id, capex_id}]"""
+    ocf = {r["id"].rsplit(":", 1)[1]: r for r in series(records, "operating_cash_flow")}
+    capex = {r["id"].rsplit(":", 1)[1]: r for r in series(records, "capex")}
+    out = []
+    for fy in sorted(set(ocf) & set(capex)):
+        filed = max(x for x in (ocf[fy].get("filed"), capex[fy].get("filed"), "") if x is not None) or None
+        out.append({"fy": fy, "value": ocf[fy]["value"] - capex[fy]["value"], "filed": filed,
+                    "ocf_id": ocf[fy]["id"], "capex_id": capex[fy]["id"]})
+    return out
+
+
+def net_debt(records: List[Dict]) -> Dict:
+    """Latest long-term debt + commercial paper - cash. Missing parts count as 0 and are listed.
+    {value, filed, parts: [ids], missing: [metrics]}"""
+    debt, cp, cash = latest(records, "long_term_debt"), latest(records, "commercial_paper"), latest(records, "cash")
+    parts = [r for r in (debt, cp, cash) if r]
+    value = sum(r["value"] for r in (debt, cp) if r) - (cash["value"] if cash else 0.0)
+    filed = max((r.get("filed") or "" for r in parts), default="") or None
+    return {"value": value, "filed": filed, "debt_ids": [r["id"] for r in (debt, cp) if r],
+            "cash_id": cash["id"] if cash else None,
+            "missing": [m for m, r in (("long_term_debt", debt), ("cash", cash)) if not r]}
 
 
 def latest(records: List[Dict], metric: str) -> Optional[Dict]:

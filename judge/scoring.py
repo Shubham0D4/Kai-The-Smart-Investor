@@ -8,19 +8,25 @@ Everything here is deterministic. Persona enters only as a row of thresholds (C7
   Buy   if S >= buy_score and every Buy gate passes (margin of safety, volatility)
   Sell  if S <= sell_score
   Hold  otherwise
-  confidence (Buy/Sell only) = 100 x |S| x integrity x (valid agents / 3)
+  confidence (Buy/Sell only) = 100 x |S| x integrity x (valid agents / 3) x Q x C
+
+Q and C come from the quant report (DESIGN.md §10.4) and can only lower confidence:
+  Q = 1 - w x mean(max(-a_i, 0)),  a_i = d x 2 x (p_i - 0.5), d = +1 Buy / -1 Sell
+  C = 1 - penalty x (valid agents contradicting the report / valid agents)
+The report never changes S or the recommendation.
 """
 
-from typing import TYPE_CHECKING, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel
 
 from agents.schema import AgentOutput
-from coordinator.config import IntegrityConfig, PersonaThresholds, Thresholds
+from coordinator.config import IntegrityConfig, PersonaThresholds, QuantConfig, Thresholds
 from judge.verifier import AgentVerification
 
 if TYPE_CHECKING:
     from coordinator.transcript import Transcript
+    from quant.models import QuantReport
 
 ALL_AGENTS = ["charlie", "delta", "gamma"]
 STANCE_SIGN = {"bullish": 1, "neutral": 0, "bearish": -1}
@@ -97,6 +103,14 @@ class Gate(BaseModel):
     note: str
 
 
+class Contradiction(BaseModel):
+    """An agent's final stance points the opposite way to a quant-report probability."""
+    agent: str
+    stance: str
+    field: str
+    value: float
+
+
 class Verdict(BaseModel):
     recommendation: Literal["Buy", "Hold", "Sell", "No Verdict"]
     confidence: Optional[float]      # None for Hold and No Verdict
@@ -107,6 +121,12 @@ class Verdict(BaseModel):
     agents_missing: List[str]
     warnings: List[str]
     reason: Optional[str] = None     # set for No Verdict
+    # quant layer (DESIGN.md §10.4); None when not applied
+    confidence_before_quant: Optional[float] = None
+    quant_agreement: Optional[float] = None          # Q
+    contradiction_factor: Optional[float] = None     # C
+    quant_signals: Dict[str, float] = {}
+    contradictions: List[Contradiction] = []
 
 
 def agent_score(output: AgentOutput, faithfulness: float) -> float:
@@ -223,3 +243,64 @@ def collect_supporting_points(outputs: Dict[str, AgentOutput], verifications: Di
             if checks.get(claim.id) and checks[claim.id].verified:
                 points.append(f"{agent} {claim.id}: {claim.text}")
     return points[:limit]
+
+
+# --------------------------------------------------------------------------- quant layer (§10.4)
+
+SIGNAL_FIELDS = ("quant:forward.prob_up_bootstrap", "quant:mc_dcf.prob_fair_above_price",
+                 "quant:base_rate.share_up")
+FORWARD_FIELD = "quant:forward.prob_up_bootstrap"
+
+
+def quant_signals(report: Optional["QuantReport"], cfg: QuantConfig) -> Tuple[Dict[str, float], List[str]]:
+    """Probabilities from the report that bear on direction, and warnings. The forward signal is
+    dropped when our own past forward forecasts scored worse than a coin flip (Brier > max_brier)."""
+    if report is None:
+        return {}, ["no quant report: confidence not adjusted by the quant layer"]
+    signals = {f: report.value(f) for f in SIGNAL_FIELDS if report.value(f) is not None}
+    warnings = []
+    brier = report.value("quant:calibration.brier")
+    if brier is not None and brier > cfg.calibration.max_brier and FORWARD_FIELD in signals:
+        del signals[FORWARD_FIELD]
+        warnings.append(f"forward probability ignored: past forecasts' Brier score {brier:.3f} "
+                        f"> {cfg.calibration.max_brier} (worse than a coin flip)")
+    return signals, warnings
+
+
+def find_contradictions(outputs: Dict[str, AgentOutput], agents: List[str], signals: Dict[str, float],
+                        margin: float) -> List[Contradiction]:
+    found = []
+    for agent in agents:
+        stance = outputs[agent].stance
+        for field, p in signals.items():
+            if (stance == "bullish" and p < 0.5 - margin) or (stance == "bearish" and p > 0.5 + margin):
+                found.append(Contradiction(agent=agent, stance=stance, field=field, value=round(p, 6)))
+    return found
+
+
+def apply_quant(verdict: Verdict, outputs: Dict[str, AgentOutput], signals: Dict[str, float],
+                signal_warnings: List[str], cfg: QuantConfig) -> Verdict:
+    """Multiply a Buy/Sell confidence by Q x C and flag contradictions (for every verdict except
+    No Verdict). Never changes the recommendation or S."""
+    if verdict.recommendation == "No Verdict":
+        return verdict
+    c = cfg.confidence
+    contradictions = find_contradictions(outputs, verdict.agents_valid, signals, c.contradiction_margin)
+    warnings = list(verdict.warnings) + signal_warnings
+    warnings += [f"contradiction: {x.agent} is {x.stance} but {x.field} = {x.value:.2f}" for x in contradictions]
+    update = {"quant_signals": dict(signals), "contradictions": contradictions, "warnings": warnings}
+
+    if verdict.recommendation in ("Buy", "Sell") and verdict.confidence is not None:
+        d = 1 if verdict.recommendation == "Buy" else -1
+        if signals:
+            against = [max(-(d * 2 * (p - 0.5)), 0.0) for p in signals.values()]
+            q = 1 - c.agreement_weight * sum(against) / len(against)
+        else:
+            q = 1.0
+            warnings.append("no quant signals available: confidence not adjusted for agreement")
+        valid = verdict.agents_valid
+        contradicting = {x.agent for x in contradictions}
+        cf = 1 - c.contradiction_penalty * (len(contradicting) / len(valid)) if valid else 1.0
+        update.update(confidence_before_quant=verdict.confidence, quant_agreement=round(q, 6),
+                      contradiction_factor=round(cf, 6), confidence=round(verdict.confidence * q * cf, 2))
+    return verdict.model_copy(update=update)

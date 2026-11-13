@@ -1,7 +1,7 @@
 """
-Market data for Gamma via yfinance: current price, shares outstanding, two years of daily
-closes, the S&P 500 over the same period (for beta) and the 10-year Treasury yield (risk-free
-rate for CAPM). Price and history are required; the benchmark and yield are optional and
+Market data via yfinance: current price, shares outstanding, ten years of daily closes (two for
+Gamma, ten for the quant layer's base rates), stock splits, the S&P 500 over two years (for
+beta) and the 10-year Treasury yield (risk-free rate for CAPM). Price and history are required; the benchmark and yield are optional and
 their absence is reported as a warning. Failures return success=False with an explicit error.
 """
 
@@ -12,6 +12,7 @@ import yfinance as yf
 BENCHMARK = "^GSPC"      # S&P 500
 RISK_FREE = "^TNX"       # 10-year Treasury yield, quoted in percent
 TRADING_DAYS_1Y = 252
+TRADING_DAYS_2Y = 504
 
 
 def _closes(ticker, period: str) -> List[Dict]:
@@ -23,34 +24,41 @@ def _closes(ticker, period: str) -> List[Dict]:
     ]
 
 
-def fetch_market_data(ticker: str, period: str = "2y") -> Dict:
+def fetch_market_data(ticker: str, period: str = "10y", benchmark_period: str = "2y") -> Dict:
     """
     MCP tool: price, shares outstanding, daily closes, benchmark closes and risk-free rate.
 
-    Returns {success, ticker, price, previous_close, shares_outstanding, history[{date, close}],
-    history_1y, benchmark_history, risk_free_rate, records[], warnings[]} or
-    {success: False, ticker, error}.
+    Returns {success, ticker, price, previous_close, shares_outstanding,
+    history (last 2y) / history_1y / history_long (full period) [{date, close}],
+    splits [{date, ratio}], benchmark_history, risk_free_rate, records[], warnings[]}
+    or {success: False, ticker, error}. Closes are split-adjusted by yfinance.
     """
     t = ticker.upper()
     try:
         tk = yf.Ticker(t)
         fi = tk.fast_info
         price = fi.last_price
-        history = _closes(tk, period)
+        history_long = _closes(tk, period)
         shares = getattr(fi, "shares", None)
     except Exception as e:
         return {"success": False, "ticker": t, "error": f"yfinance market data unavailable: {e}"}
 
     if price is None or not price > 0:
         return {"success": False, "ticker": t, "error": "yfinance returned no current price"}
-    if len(history) < 30:
+    if len(history_long) < 30:
         return {"success": False, "ticker": t,
-                "error": f"yfinance returned only {len(history)} daily prices for {period}"}
+                "error": f"yfinance returned only {len(history_long)} daily prices for {period}"}
+    history = history_long[-TRADING_DAYS_2Y:]
 
     warnings: List[str] = []
+    splits: List[Dict] = []
+    try:
+        splits = [{"date": idx.strftime("%Y-%m-%d"), "ratio": float(v)} for idx, v in tk.splits.items()]
+    except Exception as e:
+        warnings.append(f"split history unavailable: {e}")
     benchmark: List[Dict] = []
     try:
-        benchmark = _closes(yf.Ticker(BENCHMARK), period)
+        benchmark = _closes(yf.Ticker(BENCHMARK), benchmark_period)
     except Exception as e:
         warnings.append(f"benchmark {BENCHMARK} history unavailable: {e}")
     risk_free: Optional[float] = None
@@ -111,6 +119,8 @@ def fetch_market_data(ticker: str, period: str = "2y") -> Dict:
         "shares_outstanding": float(shares) if shares else None,
         "history": history,
         "history_1y": history_1y,
+        "history_long": history_long,
+        "splits": splits,
         "benchmark_history": benchmark,
         "risk_free_rate": risk_free,
         "records": records,

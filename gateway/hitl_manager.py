@@ -10,12 +10,16 @@ Rule (thresholds in config/thresholds.yaml, `hitl`):
   Buy/Sell with no confidence                  -> ACTIVE (fail closed)
   Hold                                         -> PASSIVE info notification (no confidence)
   No Verdict                                   -> PASSIVE warning notification with the reason
+
+The manager keeps no state. A step-up challenge is a plain dict stored in the session row
+(gateway/store.py), so a pending approval survives a server restart; resolve_challenge()
+validates a decision against that stored dict.
 """
 
 import os
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # Import schemas
 import sys
@@ -40,7 +44,6 @@ class HITLManager:
         self.cfg = cfg or load_thresholds().hitl
         self.approval_confidence = self.cfg.approval_confidence
         self.approval_timeout_minutes = self.cfg.approval_timeout_minutes
-        self.pending_approvals: Dict[str, Dict] = {}
 
     def evaluate_hitl_requirement(self, recommendation: str,
                                   confidence: Optional[float]) -> Tuple[HITLMode, str]:
@@ -92,9 +95,8 @@ class HITLManager:
         challenge_id = f"chal_{uuid.uuid4().hex[:16]}"
         strong = confidence is not None and confidence >= self.approval_confidence
         label = "Strong" if strong else "Low-confidence"
-        icon = ("🚀" if recommendation == "Buy" else "⚠️") if strong else "❓"
-        message = (f"{icon} {label} {recommendation} signal for {ticker} ({_fmt_conf(confidence)}). "
-                   f"Tap to approve and proceed.")
+        message = (f"{label} {recommendation} signal for {ticker} ({_fmt_conf(confidence)}). "
+                   f"Review the reasoning, then approve to proceed or reject to discard.")
         expires_at = (datetime.now() + timedelta(minutes=self.approval_timeout_minutes)).isoformat()
         if not key_points:
             key_points = [f"{label} recommendation ({_fmt_conf(confidence)})",
@@ -110,46 +112,41 @@ class HITLManager:
             expires_at=expires_at,
             key_points=key_points,
         )
-        self.pending_approvals[challenge_id] = {
-            "challenge": challenge,
-            "created_at": datetime.now(),
-            "status": "pending",
-        }
         return challenge
 
-    def check_approval_status(self, challenge_id: str) -> Optional[str]:
-        """Status: "pending", "approved", "rejected", "expired", or None."""
-        if challenge_id not in self.pending_approvals:
-            return None
-        approval_data = self.pending_approvals[challenge_id]
-        if approval_data["status"] == "pending":
-            expires_at = datetime.fromisoformat(approval_data["challenge"].expires_at)
-            if datetime.now() > expires_at:
-                approval_data["status"] = "expired"
-        return approval_data["status"]
+    @staticmethod
+    def challenge_status(challenge: Dict[str, Any], now: Optional[datetime] = None) -> str:
+        """"pending", "approved", "rejected" or "expired" for a stored challenge dict."""
+        decided = challenge.get("decision")
+        if decided:
+            return decided
+        expires_at = datetime.fromisoformat(challenge["expires_at"])
+        return "expired" if (now or datetime.now()) > expires_at else "pending"
 
-    def approve_challenge(self, challenge_id: str) -> bool:
-        if self.check_approval_status(challenge_id) != "pending":
-            return False
-        self.pending_approvals[challenge_id]["status"] = "approved"
-        self.pending_approvals[challenge_id]["approved_at"] = datetime.now()
-        return True
-
-    def reject_challenge(self, challenge_id: str) -> bool:
-        if self.check_approval_status(challenge_id) != "pending":
-            return False
-        self.pending_approvals[challenge_id]["status"] = "rejected"
-        self.pending_approvals[challenge_id]["rejected_at"] = datetime.now()
-        return True
+    def resolve_challenge(self, challenge: Optional[Dict[str, Any]], challenge_id: str, decision: str,
+                          now: Optional[datetime] = None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """
+        Validate an approve/reject decision against a stored challenge dict.
+        Returns (updated_challenge, None) on success or (None, reason) when it cannot be applied.
+        """
+        if decision not in ("approved", "rejected"):
+            return None, f"unknown decision {decision!r}"
+        if not challenge:
+            return None, "no step-up challenge is pending for this session"
+        if challenge["challenge_id"] != challenge_id:
+            return None, "challenge id does not match this session's challenge"
+        status = self.challenge_status(challenge, now)
+        if status != "pending":
+            return None, f"challenge is {status}, not pending"
+        stamp = (now or datetime.now()).isoformat()
+        return {**challenge, "decision": decision, "decided_at": stamp}, None
 
     def record_decision(self, session_id: str, challenge_id: str, decision: str, user_id: str) -> Dict:
-        """Record user's approval/rejection decision."""
-        record = {
+        """Build the decision record (the session row stores it)."""
+        return {
             "session_id": session_id,
             "challenge_id": challenge_id,
             "decision": decision,
             "user_id": user_id,
             "timestamp": datetime.now().isoformat(),
         }
-        print(f"[HITL] Decision recorded: {decision} for challenge {challenge_id}")
-        return record

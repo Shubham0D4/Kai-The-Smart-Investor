@@ -14,6 +14,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from coordinator.server import DebateCoordinator
 from coordinator.personas import RiskPersona
+from gateway.config import LOCAL_USER
 from judge.ap2_handler import AP2Handler
 from judge.sigma_agent import SigmaAgent
 
@@ -32,7 +33,7 @@ def main():
     print("[STEP 1] Initializing AP2 Protocol & Creating Intent Mandate...")
     ap2 = AP2Handler()
     mandate = ap2.create_intent_mandate(
-        user_id="antigravity_debugger",
+        user_id=LOCAL_USER,
         ticker=args.ticker,
         persona=args.persona
     )

@@ -57,3 +57,40 @@ def test_no_notification_is_a_plain_success(hitl, rec, conf):
     mode, _ = hitl.evaluate_hitl_requirement(rec, conf)
     assert mode == HITLMode.PASSIVE
     assert hitl.create_notification(rec, conf, "AAPL").type != "success"
+
+
+# ---------------------------------------------------------------- stored challenges (survive restarts)
+
+from datetime import datetime, timedelta
+
+
+def _challenge(hitl, minutes=5):
+    ch = hitl.create_step_up_challenge("Buy", 70.0, "AAPL").model_dump(mode="json")
+    ch["expires_at"] = (datetime.now() + timedelta(minutes=minutes)).isoformat()
+    return ch
+
+
+def test_manager_keeps_no_state_between_challenges(hitl):
+    assert not hasattr(hitl, "pending_approvals")
+    ch = _challenge(hitl)
+    new_manager = HITLManager()                    # e.g. after a restart: only the stored dict matters
+    updated, err = new_manager.resolve_challenge(ch, ch["challenge_id"], "approved")
+    assert err is None and updated["decision"] == "approved" and updated["decided_at"]
+    assert new_manager.challenge_status(updated) == "approved"
+
+
+@pytest.mark.parametrize("decision, error", [("maybe", "unknown decision")])
+def test_resolve_rejects_unknown_decisions(hitl, decision, error):
+    ch = _challenge(hitl)
+    assert hitl.resolve_challenge(ch, ch["challenge_id"], decision)[1].startswith(error)
+
+
+def test_resolve_refuses_wrong_missing_decided_and_expired_challenges(hitl):
+    ch = _challenge(hitl)
+    assert "does not match" in hitl.resolve_challenge(ch, "chal_other", "approved")[1]
+    assert "no step-up challenge" in hitl.resolve_challenge(None, "x", "approved")[1]
+    decided, _ = hitl.resolve_challenge(ch, ch["challenge_id"], "rejected")
+    assert "rejected, not pending" in hitl.resolve_challenge(decided, ch["challenge_id"], "approved")[1]
+    expired = _challenge(hitl, minutes=-1)
+    assert hitl.challenge_status(expired) == "expired"
+    assert "expired" in hitl.resolve_challenge(expired, expired["challenge_id"], "approved")[1]

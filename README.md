@@ -1,183 +1,316 @@
 # Kai — The Smart Investor
 
-**Kai** is an AI-powered investment analysis system that uses a **multi-agent debate architecture** to provide explainable, trustworthy, and data-driven investment insights. Unlike black-box models, Kai employs a "Council of Agents" — led by a Coordinator — to debate investment theses from fundamental, sentiment, and valuation perspectives before a Judge agent creates a final "Alpha Packet" for the user.
+**An explainable investing copilot.** Kai analyses a US-listed stock with a small committee of AI agents, makes them fact-check each other against the underlying data, and then **computes** the verdict with fixed, auditable rules. The language model argues and explains; it never decides.
+
+> Kai is a research tool. It is not investment advice, and nothing it outputs is a recommendation to buy or sell any security.
+
+- Use cases and walkthroughs: [USECASES.md](USECASES.md)
+- Design decisions and rationale: [DESIGN.md](DESIGN.md)
+- Known issues and the engineering log: [FIXES.md](FIXES.md)
 
 ---
 
-## 🏗 System Architecture
+## Contents
 
-Kai uses a **hierarchical multi-agent (HMA)** architecture where specialist agents debate investment decisions. This ensures that every recommendation is vigorously stress-tested from multiple angles.
+1. [Why Kai](#why-kai)
+2. [How it works](#how-it-works)
+3. [What you get from one analysis](#what-you-get-from-one-analysis)
+4. [Quick start](#quick-start)
+5. [Configuration](#configuration)
+6. [How the verdict is computed](#how-the-verdict-is-computed)
+7. [The quant layer](#the-quant-layer)
+8. [Architecture and project layout](#architecture-and-project-layout)
+9. [API reference](#api-reference)
+10. [Testing](#testing)
+11. [Security and privacy](#security-and-privacy)
+12. [Limitations](#limitations)
+13. [Roadmap](#roadmap)
+
+---
+
+## Why Kai
+
+Most "AI stock analysis" tools hand you a paragraph and a rating, with no way to tell which parts are grounded in data and which were invented. Kai is built around the opposite principle: **code fetches and checks; the model only argues.**
+
+| Common problem | What Kai does instead |
+|---|---|
+| The model quotes numbers from memory | Every figure an agent states must cite an evidence record, and is **re-computed in code** from the fetched data (1% tolerance). Numbers in a claim's wording are checked too. |
+| A single model, a single opinion | Three specialists with different data (Charlie: SEC financials, Delta: news, Gamma: valuation and risk) state claims, challenge each other's claims **by id**, then revise. |
+| "Confidence" is whatever the model says | Confidence is a formula over the debate score, fact-check results, debate integrity and a quantitative report. |
+| The verdict is a paragraph | The verdict is computed from stances, verified claims and persona thresholds. The model's explanation cannot change it. |
+| Failures are hidden | If data is missing, an agent fails, or the fact-check breaks the debate, Kai says **No Verdict** with the reason. It never falls back to the model's own knowledge. |
+| Black-box output | Every claim, critique, change of mind, gate and statistic is shown, with its source and sample size. A signed record of the result is stored. |
+
+## How it works
 
 ```mermaid
-graph TD
-    User([User]) <--> Client[React Dashboard]
-    Client <--> Gateway[FastAPI Gateway]
-    
-    subgraph "Kai Council (Backend)"
-        Gateway --> Coordinator[Debate Coordinator]
-        
-        Coordinator <--> Charlie[Charlie: Fundamental]
-        Coordinator <--> Delta[Delta: Sentiment]
-        Coordinator <--> Gamma[Gamma: Valuation]
-        
-        Charlie & Delta & Gamma --> Sigma[Sigma: Judge]
-        Sigma --> AlphaPacket(Alpha Packet)
+flowchart TD
+    U([You: ticker + persona]) --> UI[React dashboard]
+    UI -->|REST, polling| GW[FastAPI gateway<br/>thread pool, SQLite]
+    GW --> CO[Debate coordinator]
+
+    subgraph FETCH["1 · Fetch once, in code, before any model runs"]
+      SEC[SEC EDGAR XBRL<br/>5 fiscal years]
+      MKT[yfinance<br/>price, 10y history, benchmarks]
+      NEWS[4 news feeds<br/>merged, majority vote]
     end
-    
-    subgraph "External Data"
-        Charlie -.-> SEC[SEC EDGAR]
-        Delta -.-> News[News/Sentiment]
-        Gamma -.-> Finance[Yahoo Finance]
-    end
-    
-    Gateway --> AlphaPacket
+    CO --> FETCH
+    FETCH --> Q[2 · Quant report<br/>pure statistics, no LLM]
+
+    Q --> R1[3 · Round 1<br/>Charlie · Delta · Gamma<br/>independent claims with evidence]
+    R1 --> CB{4 · Fact-check<br/>faithfulness ≥ 0.60?}
+    CB -->|fewer than 2 agents pass| NV[No Verdict<br/>with reason]
+    CB -->|ok| R2[5 · Round 2<br/>challenge claims by id]
+    R2 --> R3[6 · Round 3<br/>final stance + what changed and why]
+    R3 --> S[7 · Sigma, the judge<br/>computes scores and verdict]
+    Q --> S
+    S --> AP[Signed alpha packet]
+    S --> H{Buy/Sell ≥ 60<br/>confidence?}
+    H -->|yes| A[Human approval]
+    H -->|no| N[Notification / warning]
 ```
 
-### The Council
-- **Charlie (Fundamental)**: Analyzes SEC filings, balance sheets, and cash flow.
-- **Delta (Sentiment)**: Processes news streams, market sentiment, and macro indicators.
-- **Gamma (Valuation)**: Performs quantitative models (DCF, Comparables) and technical analysis.
-- **Sigma (Judge)**: Synthesizes the debate, resolving conflicts and assigning confidence scores to generate the final **Alpha Packet**.
+1. **Fetch.** SEC financial statements, market data and news are fetched once, by code. Agents receive them as numbered evidence records (for example `sec:revenue:FY2026`); they do not call tools themselves.
+2. **Quant report.** A deterministic statistics module builds a report (volatility, beta, Monte Carlo DCF, forward probabilities, and more) before round 1.
+3. **Round 1.** Each agent returns validated JSON: a stance, a confidence, and claims. Every claim cites evidence.
+4. **Circuit breaker.** Every claim is re-checked against the data. An agent below 60% faithfulness is dropped; with fewer than two agents left the debate ends with *No Verdict*.
+5. **Round 2.** Each agent challenges or confirms specific claims of the others by id (`charlie.C2`), citing evidence from its own data.
+6. **Round 3.** Each agent gives a final stance and states which claims or critiques changed its mind and why. Every critique it received must be answered.
+7. **Judge.** Sigma scores the debate and applies the persona's thresholds. One model call writes the explanation afterwards.
 
----
+A full analysis makes roughly ten model calls (nine agent calls plus the explanation, plus retries when a reply is invalid), under a hard budget of 50,000 tokens across all rounds.
 
-## 📂 Project Structure
+## What you get from one analysis
 
-```bash
-.
-├── agents/                   # Specialist ADK (Agent Development Kit) agents
-│   ├── charlie_fundamental/  # Fundamental analysis agent
-│   ├── delta_sentiment/      # News & sentiment agent
-│   └── gamma_valuation/      # Quantitative valuation agent
-├── coordinator/              # Orchestrator for inter-agent debates
-├── gateway/                  # FastAPI Backend & HITL (Human-in-the-Loop) Manager
-├── judge/                    # Sigma agent & AP2 (Alpha Packet) handler
-├── kai-frontend/             # React/Vite Dashboard
-├── mcp_server/               # Model Context Protocol tools & data fetchers
-├── tests/                    # Back-testing and consistency checks
-└── requirements.txt          # Python dependencies
-```
+- **A verdict**: Buy, Hold, Sell or No Verdict. Only Buy and Sell carry a confidence number.
+- **Why**: decision gates with their values, the verified supporting points, and the risks the agents raised.
+- **Trust metrics**: *faithfulness* (share of numeric claims that match the data) and *debate integrity* (critiques answered, failed claims corrected).
+- **The debate itself**: per agent, every claim with its evidence, verification status, the round-2 challenges and the round-3 changes.
+- **A quant report**: ranges and probabilities, each with the sample size behind it and a label for whether it describes the past, follows from stated assumptions, or is a prediction.
+- **Persona comparison**: the same debate judged under Zen, Balanced and Alpha thresholds.
+- **A signed alpha packet** (Ed25519) containing the verdict, scores, risks and the full quant report, plus a stored debate log and token-use trace.
+- **Human-in-the-loop approval** for Buy/Sell signals at or above the confidence threshold.
 
----
-
-## 🚀 Getting Started
+## Quick start
 
 ### Prerequisites
-- **Python 3.10+**
-- **Node.js 18+** & **npm**
-- **Groq API Key** (for LLM inference)
-- **Google AI API Key** (for additional agent capabilities)
 
-### 1. Backend Setup
+- Python 3.10+ (developed and tested on 3.12)
+- Node.js 18+ and npm
+- At least one LLM key: a **Groq** key and/or a **Google AI (Gemini)** key. Groq is tried first, Gemini is the fallback.
+- Internet access for live analyses (SEC EDGAR, Yahoo Finance and news feeds). The test suite needs neither keys nor network.
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/Shubham0D4/Kai-The-Smart-Investor.git
-   cd Kai-The-Smart-Investor
-   ```
-
-2. **Create and activate a virtual environment**:
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install python dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Configure Environment Variables**:
-   Copy the example file and fill it in:
-   ```bash
-   cp .env.example .env
-   ```
-   `GATEWAY_SECRET_KEY` is **required** (the gateway refuses to start without it).
-   Generate one with `python -c "import secrets; print(secrets.token_hex(32))"`.
-   Example contents:
-   ```env
-   # LLM Providers
-   GOOGLE_API_KEY=your_google_key_here
-   GROQ_API_KEY=your_groq_key_here
-
-   # Server Config
-   GATEWAY_HOST=0.0.0.0
-   GATEWAY_PORT=8080
-   
-   # Security
-   GATEWAY_SECRET_KEY=your_secure_random_string
-
-   # AP2 signing key (generated on first run if missing; *.pem is gitignored)
-   AP2_PRIVATE_KEY_PATH=ap2_private_key.pem
-   ```
-
-5. **Run the tests** (offline: fake LLM + recorded fixtures, no keys needed):
-   ```bash
-   pytest            # add --live to include tests that need network/API keys
-   ```
-
-### 2. Frontend Setup
-
-1. **Navigate to the frontend directory**:
-   ```bash
-   cd kai-frontend
-   ```
-
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
-
-3. **Start the development server**:
-   ```bash
-   npm run dev
-   ```
-   The frontend will typically run on `http://localhost:5173`.
-
----
-
-## 🏃‍♂️ Usage
-
-### Running the Backend
-From the root directory (ensure your virtual environment is active):
+### Install
 
 ```bash
-uvicorn gateway.app:app --reload --port 8080
+git clone https://github.com/Shubham0D4/Kai-The-Smart-Investor.git
+cd Kai-The-Smart-Investor
+
+python3 -m venv venv
+source venv/bin/activate            # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+cd kai-frontend && npm install && cd ..
 ```
-This starts the central API, which orchestrates the agents and handles the database.
-- **API Docs**: `http://localhost:8080/docs`
-- **Health Check**: `http://localhost:8080/health`
 
-### Using the Dashboard
-1. Open your browser to `http://localhost:5173` (or the port shown by Vite).
-2. **Login/Register** (default auth uses a local SQLite database).
-3. **Start an Analysis**: Enter a ticker symbol (e.g., `AAPL`, `TSLA`) and choose a risk persona (Zen, Balanced, Alpha).
-4. **Watch the Debate**: The "Council" will debate in real-time. You can see the logs as Charlie, Delta, and Gamma argue their points.
-5. **View Results**: Once the debate is over, Sigma will produce an "Alpha Packet" with a Buy/Hold/Sell recommendation and a confidence score.
+### Configure
 
----
+```bash
+cp .env.example .env                # then add GROQ_API_KEY and/or GOOGLE_API_KEY
+```
 
-## ✨ Key Features
+`.env` is gitignored. Keep real keys out of `.env.example`.
 
-- **Transparent Reasoning**: See exactly *why* a decision was made by reading the debate logs.
-- **Risk Personas**:
-    - 🧘 **Zen**: Conservative, focuses on long-term value and dividends.
-    - ⚖️ **Balanced**: Standard growth-at-a-rational-price approach.
-    - 🚀 **Alpha**: Aggressive, focuses on high-growth and momentum.
-- **Human-in-the-Loop (HITL)**: For high-stakes decisions, the system can pause and request human approval.
-- **AP2 Protocol**: Uses "Alpha Packet" standards for verifiable investment mandates.
+### Run
 
----
+Backend (terminal 1):
 
-## 🛠 Tech Stack
+```bash
+source venv/bin/activate
+uvicorn gateway.app:app --port 8080
+```
 
-- **Backend**: Python, FastAPI, Pydantic, SQLAlchemy
-- **Frontend**: React, Vite, Bootstrap, Recharts
-- **AI/LLM**: Groq (Llama 3), Google Gemini (via ADK)
-- **Data**: Yahoo Finance (yfinance), SEC EDGAR
-- **Database**: SQLite (Development), PostgreSQL (Production ready)
+Frontend (terminal 2):
 
----
+```bash
+cd kai-frontend
+npm run dev
+```
 
-## 📄 License
-TBD
+Open **http://localhost:5173**, enter a ticker (for example `AAPL`), choose a persona, and press **Run analysis**. The API documentation is at `http://127.0.0.1:8080/docs`.
+
+### Without the browser
+
+```bash
+python -m coordinator.server --ticker AAPL --persona balanced   # one debate, log in debate_logs/
+python scripts/simulate_debate.py --ticker NVDA --persona alpha # debate + signed alpha packet
+```
+
+## Configuration
+
+### Environment variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `GROQ_API_KEY` | – | Groq key (tried first) |
+| `GOOGLE_API_KEY` | – | Gemini key (fallback) |
+| `KAI_GROQ_MODEL` | `openai/gpt-oss-120b` | Groq model id (providers retire ids; check what your key can use) |
+| `KAI_GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model id |
+| `GATEWAY_HOST` | `127.0.0.1` | Bind address. Change only after adding authentication. |
+| `GATEWAY_PORT` | `8080` | Port |
+| `GATEWAY_CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Browser origins allowed to call the API |
+| `KAI_DB_URL` | `sqlite:///./kai.db` | Sessions, history and chat |
+| `KAI_MAX_CONCURRENT_DEBATES` | `2` | Debates that may run at once |
+| `KAI_THRESHOLDS_PATH` | `config/thresholds.yaml` | Alternative thresholds file |
+| `AP2_PRIVATE_KEY_PATH` | `ap2_private_key.pem` | Ed25519 signing key; generated on first run if missing |
+| `VITE_API_URL` | `http://127.0.0.1:8080` | Backend URL used by the frontend |
+| `VITE_FINNHUB_API_KEY` | – | Optional: live trade prices on the ticker page |
+
+### Decision thresholds: `config/thresholds.yaml`
+
+Every tunable number lives in one validated file, editable by hand. The persona only selects a row here; **it is never given to the agents** and never alters valuation inputs.
+
+| | Buy if score ≥ | and margin of safety ≥ | and volatility ≤ | Sell if score ≤ |
+|---|---|---|---|---|
+| **Zen** | 0.50 | 25% | 35% | −0.20 |
+| **Balanced** | 0.35 | 15% | 50% | −0.30 |
+| **Alpha** | 0.25 | 0% | no limit | −0.40 |
+
+The same file sets the fact-check floor (0.60), the minimum number of valid agents (2), the token budget (50,000), the CAPM constants, the Monte Carlo and bootstrap settings, the human-approval threshold (confidence 60) and the quant layer's seed. Zen and Balanced cannot issue a Buy without a computed DCF margin of safety; Alpha can.
+
+## How the verdict is computed
+
+All of this runs in code (`judge/`), not in a model.
+
+```
+agent score   s_a = stance (+1 bullish, 0 neutral, −1 bearish) × confidence/100 × faithfulness_a
+debate score  S   = average of s_a over the agents that passed the fact-check        (−1 … +1)
+
+Buy   if S ≥ buy threshold and margin of safety and volatility gates pass
+Sell  if S ≤ sell threshold
+Hold  otherwise                       (a blocked Buy is reported with the gate that blocked it)
+
+confidence (Buy/Sell only) = 100 × |S| × integrity × (agents counted / 3) × Q × C
+```
+
+- **Faithfulness** is verified claims ÷ checkable claims (with a floor of three so one easy claim cannot score 100%). Numeric claims are re-computed (`equals`, `growth`, `ratio`, `diff`); quotes must appear in the cited article; inferences must rest on verified claims.
+- **Integrity** rewards answering every critique and correcting claims that failed the fact-check. Changing your mind for a stated reason costs nothing; an unexplained flip is penalised.
+- **Q (agreement)** lowers confidence when the quant report's probabilities point against the verdict. **C (contradictions)** lowers it when agents' stances conflict with the report. Both can only lower confidence, by at most half each, and never change Buy/Hold/Sell.
+- **Human approval:** a Buy or Sell at confidence ≥ 60 requires explicit approval. Lower-confidence Buy/Sell is delivered as a visible warning, never as a plain success.
+
+## The quant layer
+
+`quant/` is pure statistics (numpy, scipy, statsmodels): no network and no LLM. Every field carries its value, unit, interval where one exists, and the sample size or simulation count behind it. Missing or too-short inputs produce an explicit **unavailable** with a reason, never a default number. Randomness is seeded and the seed is recorded in the report.
+
+| Group | Contents | Nature |
+|---|---|---|
+| Return distribution | annualised volatility, skew, kurtosis, max drawdown, historical and normal 1-day VaR (95%) | describes the past (normal VaR: model) |
+| Market relationship | beta and its standard error, correlation, regression intercept, CAPM discount rate | describes the past (CAPM rate: model) |
+| Monte Carlo DCF | fair-value p10/p50/p90 and the share of simulations above the current price | model: follows from stated assumptions |
+| Forward simulation | probability the price is above today's after 63 trading days (block bootstrap and normal), with intervals | prediction; trend removed by default (`drift_mode`) |
+| Base rates | share of similar past cases that rose, with Wilson interval | describes the past; "insufficient data" below 30 cases |
+| Calibration | Brier score and reliability table of Kai's own past forecasts | describes the past; needs the backtest script |
+
+## Architecture and project layout
+
+```
+.
+├── agents/            Charlie, Delta, Gamma + the shared claim schema (pydantic)
+├── coordinator/       Debate orchestration, transcript, LLM client, config loader, debate log
+├── judge/             Verifier (claim checks), scoring (verdict), Sigma, AP2 signing
+├── quant/             Deterministic statistics and the QuantReport model
+├── gateway/           FastAPI app, session store (SQLite), HITL manager, response schemas
+├── mcp_server/        Data tools (SEC, market, news, finance math); optional MCP adapter
+├── config/            thresholds.yaml
+├── scripts/           simulate_debate.py, calibration_backtest.py (live)
+├── kai-frontend/      React 19 + Vite + Bootstrap 5.3 dashboard
+└── tests/             Offline test suite and recorded fixtures
+```
+
+Runtime files (all gitignored): `kai.db` (sessions, history, chat), `debate_logs/` (the persisted transcript of each debate), `alpha_packets/` (signed packets), `*.pem` (signing key).
+
+**Data sources**
+
+| Data | Source |
+|---|---|
+| Financial statements (5 fiscal years: revenue, margins, EPS, cash flow, debt, equity, shares) | SEC EDGAR XBRL company facts |
+| Prices, 10-year history, splits, S&P 500, 10-year Treasury yield | Yahoo Finance via `yfinance` |
+| News with summaries | yfinance news, Yahoo Finance RSS, Nasdaq RSS and Google News RSS, fetched in parallel, de-duplicated, with conflicts resolved by majority |
+
+**Design notes.** The gateway runs debates in a thread pool so it stays responsive; live progress is read from the debate log, which the coordinator writes atomically after every agent step. Session state, including a pending approval, survives a server restart. The rationale for each decision, and the alternatives rejected, are in [DESIGN.md](DESIGN.md).
+
+**Frontend.** Light theme by default with a dark option; Inter and JetBrains Mono are bundled locally. It shows the committee's status live, the verdict, the quant report, per-agent claims with clickable evidence, the debate log and the token trace, plus loading, error, circuit-breaker and approval states.
+
+## API reference
+
+Base URL `http://127.0.0.1:8080`. There is no authentication (see [Security](#security-and-privacy)). Interactive docs at `/docs`.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/v1/analyze` | Start an analysis: `{ "ticker": "AAPL", "persona": "zen" }`. Returns a session id immediately. |
+| `GET` | `/api/v1/status/{session_id}` | Full state: debate (per-agent rounds, evidence, verification), Sigma's verdict, quant report, signed packet, challenge |
+| `GET` | `/api/v1/sessions/{session_id}/logs` | The debate log lines so far |
+| `POST` | `/api/v1/approve/{session_id}` | Approve a pending step-up challenge: `{ "challenge_id": "…" }` |
+| `POST` | `/api/v1/reject/{session_id}` | Reject it |
+| `GET` | `/api/v1/history` | Past analyses, newest first |
+| `GET` | `/api/v1/market/indices` | Major indices (502 if the provider fails; no substitute numbers) |
+| `GET` | `/api/v1/ticker/{symbol}/quote` · `/history?period=` · `/news` | Quote, chart data, news |
+| `GET` | `/api/v1/market/news` | Broad-market news |
+| `GET` `POST` | `/api/v1/chat/history` · `/api/v1/chat` | Assistant chat (needs a Groq key; 503 otherwise) |
+| `GET` | `/health` | Liveness |
+
+## Testing
+
+```bash
+pytest                                   # backend: offline, no keys, no network (about 240 tests)
+pytest --live                            # also run tests that need network / API keys
+
+cd kai-frontend
+npm run lint
+npm test                                 # component and client tests against real API payloads
+npm run build
+```
+
+- The backend suite runs against **recorded** SEC, news and yfinance fixtures and a fake LLM client, and blocks any unexpected network call.
+- The frontend tests render the real components against `/status` payloads exported from the backend. A backend test fails if the API shape drifts from those fixtures; regenerate them with `KAI_WRITE_UI_FIXTURES=1 pytest tests/integration/test_ui_fixtures.py`.
+- Calibration against history is a separate, live script: `python scripts/calibration_backtest.py --tickers AAPL MSFT --start 2018-01-01 --end 2025-06-30`. It builds the report using only data available at each past date, and asserts no input is dated after it.
+
+## Security and privacy
+
+- **Single-user, local, no authentication.** The gateway binds to `127.0.0.1` and accepts browser requests only from the Vite origins. **Do not expose it on a network** before adding authentication.
+- **Your keys** live in `.env` (gitignored). They are used only to call the providers you configured.
+- **What leaves your machine:** the evidence records and prompts for each analysis are sent to your configured LLM provider (Groq and/or Google), and data requests go to SEC EDGAR, Yahoo Finance and news feeds. Do not analyse anything you would not send to those services.
+- **Signing key:** alpha packets are signed with an Ed25519 key generated on first run (`AP2_PRIVATE_KEY_PATH`, file mode 0600). Never commit it.
+- Alpha packets prove **integrity** (the content was not altered after signing by this key), not that the analysis is correct.
+
+## Limitations
+
+Stated plainly, because they matter for how much to trust the output:
+
+- **Scope.** Designed for US-listed companies that file 10-Ks with SEC XBRL data. If a company's data is missing or unusable (for example foreign filers, or a company whose free cash flow is not positive), the affected agent or the DCF is reported as unavailable and the debate may end as *No Verdict*; Kai does not fill the gap from the model's memory. Only AAPL has been exercised end to end against recorded data; other tickers are untested here.
+- **A verdict is a structured opinion, not a forecast.** The forward probabilities extrapolate the past year's return *distribution* (trend removed by default) and carry no information about earnings, rate decisions or news that has not happened.
+- **Fact-checking covers data claims, not judgement.** Numbers and quotes are verified; the agents' qualitative `risks` lists are the model's own words and are not checked.
+- **News relevance is not filtered.** A ticker's feed can include stories mainly about other companies.
+- **Base rates and calibration are usually "unavailable".** One stock's own history rarely contains 30 comparable cases, and calibration needs the backtest to be run first.
+- **Model dependence.** Output quality depends on the LLM. Providers retire model ids; set `KAI_GROQ_MODEL` / `KAI_GEMINI_MODEL` if a default stops working.
+- **Not a trading system.** Approval does not place an order. There is no brokerage integration.
+- **Partial pieces.** The MCP server in `mcp_server/` exposes the data tools but is not used by the app's own debate path and is not covered by tests; Phoenix tracing (`PHOENIX_ENABLED`) is an optional hook. The earlier A2A and ADK claims were dropped (see DESIGN.md §6).
+- The frontend has been verified in headless Chromium (light, dark, phone width) and under jsdom, not across all browsers.
+
+## Roadmap
+
+Tracked in detail in [FIXES.md](FIXES.md). The main open items:
+
+- Authentication before any shared or public deployment.
+- Run the calibration backtest and publish the reliability results; a cross-stock case table so base rates become usable.
+- Verify the qualitative `risks` against the evidence.
+- News relevance filtering.
+- A decision on the optional MCP adapter: implement it properly or remove it.
+
+## Disclaimer
+
+Kai is provided for research and educational purposes. It does not provide financial, investment, legal or tax advice. Markets involve risk, including loss of capital; verify any figure against primary sources before relying on it.
+
+## License
+
+Not yet specified. Add a `LICENSE` file before distributing or accepting contributions.

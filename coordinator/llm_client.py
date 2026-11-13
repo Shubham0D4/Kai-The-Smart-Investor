@@ -13,22 +13,30 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Model ids change: providers retire them (gemini-2.0-flash-exp and llama-3.3-70b-versatile
+# both stopped working). Override with KAI_GROQ_MODEL / KAI_GEMINI_MODEL in .env.
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+
+
 class MultiLLMClient:
     """
     Unified LLM client with automatic fallback and retry logic.
     """
     
-    def __init__(self, system_instruction: str, model_name: str = "gemini-2.0-flash-exp"):
+    def __init__(self, system_instruction: str, model_name: Optional[str] = None):
         """
         Initialize LLM clients.
         
         Args:
             system_instruction: System prompt for the agent
-            model_name: Primary model name (Gemini)
+            model_name: Gemini model (default: KAI_GEMINI_MODEL or DEFAULT_GEMINI_MODEL)
+
+        Groq is tried first (KAI_GROQ_MODEL or DEFAULT_GROQ_MODEL), then Gemini.
         """
         self.system_instruction = system_instruction
-        self.primary_model_name = model_name
-        self.fallback_model_name = "llama-3.3-70b-versatile"
+        self.primary_model_name = model_name or os.getenv("KAI_GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
+        self.fallback_model_name = os.getenv("KAI_GROQ_MODEL") or DEFAULT_GROQ_MODEL
         
         # Initialize Gemini
         gemini_key = os.getenv("GOOGLE_API_KEY")
@@ -52,6 +60,7 @@ class MultiLLMClient:
         """
         Generate content with priority: Groq -> Gemini.
         """
+        groq_error = None
         # 1. Try Groq first
         if self.groq_client:
             try:
@@ -80,7 +89,8 @@ class MultiLLMClient:
                     chat_completion.usage.completion_tokens
                 )
             except Exception as e:
-                print(f"[LLM] Groq call failed: {e}. Falling back to Gemini...")
+                groq_error = e
+                print(f"[LLM] Groq call failed ({self.fallback_model_name}): {e}. Falling back to Gemini...")
                 # Proceed to Gemini fallback
         
         # 2. Fallback to Gemini
@@ -89,6 +99,11 @@ class MultiLLMClient:
                 try:
                     return self.gemini_model.generate_content(prompt)
                 except Exception as e:
+                    if groq_error is not None and "429" not in str(e):
+                        # Both providers failed: say so, with both reasons, not just the last one
+                        raise RuntimeError(
+                            f"Groq ({self.fallback_model_name}) failed: {groq_error} | "
+                            f"Gemini ({self.primary_model_name}) failed: {e}") from e
                     if "429" in str(e):
                         if attempt < max_retries - 1:
                             delay = 5 * (2 ** attempt) + random.uniform(0, 1)
@@ -102,7 +117,10 @@ class MultiLLMClient:
                         raise e
             return # Should be unreachable if max_retries > 0 loop logic holds or raises
         else:
-            raise ValueError("No LLM clients available or both failed.")
+            if groq_error is not None:
+                raise RuntimeError(f"Groq ({self.fallback_model_name}) failed: {groq_error}; "
+                                   f"no Gemini key configured") from groq_error
+            raise ValueError("No LLM clients available: set GROQ_API_KEY and/or GOOGLE_API_KEY.")
 
 
 class FakeResponse:

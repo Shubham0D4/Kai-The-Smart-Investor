@@ -1,134 +1,88 @@
-import React, { useState, useEffect } from 'react';
-import { Form, InputGroup, Button, Dropdown, DropdownButton, Spinner, Alert } from 'react-bootstrap';
-import { Search, Shield, Zap, Scale, Triangle } from 'lucide-react';
-import { initiateAnalysis } from '../services/api';
-import { useCommittee } from '../context/CommitteeContext';
-import { useAuth } from '../context/AuthContext';
+import React, { useEffect, useRef, useState } from 'react';
+import { Button, Form, Spinner } from 'react-bootstrap';
+import { Scale, Search, Shield, Zap } from 'lucide-react';
+import { useCommittee } from '../context/committee';
+
+const PERSONAS = [
+    { id: 'Zen', icon: Shield, hint: 'Strictest thresholds: Buy needs a wide margin of safety and low volatility.' },
+    { id: 'Balanced', icon: Scale, hint: 'Middle thresholds.' },
+    { id: 'Alpha', icon: Zap, hint: 'Most permissive thresholds: willing to Buy without a margin of safety.' },
+];
 
 const SearchInterface = ({ initialTicker = '' }) => {
-    const { addLog, simulateToolCall, setSessionId, setCurrentTicker } = useCommittee();
+    const { session, starting, startError, startAnalysis } = useCommittee();
     const [ticker, setTicker] = useState(initialTicker);
     const [persona, setPersona] = useState('Balanced');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
-    const inputRef = React.useRef(null);
+    const inputRef = useRef(null);
+    const running = session?.status === 'running';
 
+    // Global shortcut: Cmd/Ctrl+K focuses the ticker box
     useEffect(() => {
-        if (initialTicker) setTicker(initialTicker);
-    }, [initialTicker]);
-
-    // Global Shortcut: Cmd+K / Ctrl+K
-    useEffect(() => {
-        const handleKeyDown = (e) => {
+        const onKeyDown = (e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
                 e.preventDefault();
                 inputRef.current?.focus();
             }
         };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
     }, []);
 
-    const { user } = useAuth();
-
-    const handleAnalysis = async (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
-        if (!ticker) return;
-
-        setLoading(true);
-        setError(null);
-        setCurrentTicker(ticker);
-
-        try {
-            const data = await initiateAnalysis(ticker, persona, user?.username || 'anonymous');
-            if (data && data.session_id) {
-                setSessionId(data.session_id);
-            }
-        } catch (err) {
-            setError("Failed to initiate analysis. Ensure backend is running.");
-            console.error("Analysis error:", err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const getPersonaIcon = (p) => {
-        switch (p) {
-            case 'Zen': return <Shield size={18} className="text-success" />;
-            case 'Alpha': return <Zap size={18} className="text-danger" />;
-            default: return <Scale size={18} className="text-primary" />;
-        }
+        if (!ticker.trim() || running) return;
+        startAnalysis(ticker, persona);
     };
 
     return (
-        <div className="glass-panel p-5 shadow-lg animate-fade-in-up" style={{ maxWidth: '750px', margin: '6rem auto 4rem auto' }}>
-            <div className="text-center mb-5">
-                <h1 className="fw-bolder mb-3 display-5 ls-tight">
-                    <span className="text-gradient">Market Intelligence</span>
-                </h1>
-                <p className="text-secondary fs-5 opacity-75" style={{ maxWidth: '500px', margin: '0 auto' }}>
-                    Deploy an autonomous council of AI agents to analyze any ticker with institutional depth.
+        <section className="kai-card" data-testid="search-card">
+            <div className="kai-card-body">
+                <h1 className="mb-1">Analyze a ticker</h1>
+                <p className="mb-4" style={{ maxWidth: 620 }}>
+                    Three specialist agents read the SEC filings, the news and the market data, challenge each other, and a
+                    judge computes the verdict. Every figure they cite is checked against the fetched data.
                 </p>
-            </div>
 
-            <Form onSubmit={handleAnalysis}>
-                <div className="position-relative mb-5 mx-auto" style={{ maxWidth: '600px' }}>
-                    <Form.Control
-                        ref={inputRef}
-                        size="lg"
-                        placeholder="Enter Ticker (Cmd + K)"
-                        className="py-3 px-5 rounded-pill fs-4 shadow-sm"
-                        style={{ paddingLeft: '60px', height: '64px', backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
-                        value={ticker}
-                        onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                    />
-                    <Search className="position-absolute opacity-50" size={26} style={{ left: '24px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
-                </div>
-
-                <div className="d-flex gap-3 justify-content-center mb-5">
-                    {['Zen', 'Balanced', 'Alpha'].map((p) => (
-                        <div
-                            key={p}
-                            onClick={() => setPersona(p)}
-                            className={`px-4 py-2 rounded-pill cursor-pointer d-flex align-items-center gap-2 transition-all user-select-none ${persona === p ? 'bg-primary text-white shadow-md scale-up' : 'bg-white bg-opacity-50 text-muted border border-light hover-bg-white'}`}
-                            style={{ cursor: 'pointer', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' }}
-                        >
-                            {getPersonaIcon(p)}
-                            <span className="fw-medium">{p}</span>
+                <Form onSubmit={handleSubmit}>
+                    <div className="d-flex flex-column flex-md-row gap-3 align-items-stretch align-items-md-center">
+                        <div className="position-relative flex-grow-1">
+                            <Search size={18} className="position-absolute text-muted" style={{ left: 14, top: '50%', transform: 'translateY(-50%)' }} />
+                            <Form.Control
+                                ref={inputRef}
+                                aria-label="Ticker symbol"
+                                placeholder="Ticker, e.g. AAPL"
+                                style={{ paddingLeft: 42, height: 46, fontWeight: 600, letterSpacing: '0.02em', minWidth: 220 }}
+                                value={ticker}
+                                maxLength={10}
+                                onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                            />
                         </div>
-                    ))}
-                </div>
+                        <div className="kai-segment" role="group" aria-label="Decision thresholds">
+                            {PERSONAS.map(({ id, icon: Icon, hint }) => (
+                                <button key={id} type="button" aria-pressed={persona === id} onClick={() => setPersona(id)} title={hint}>
+                                    <Icon size={15} />{id}
+                                </button>
+                            ))}
+                        </div>
+                        <Button variant="primary" type="submit" disabled={starting || running || !ticker.trim()} style={{ height: 46, minWidth: 170 }}>
+                            {starting || running ? (
+                                <span className="d-inline-flex align-items-center gap-2">
+                                    <Spinner as="span" animation="border" size="sm" aria-hidden="true" />
+                                    {starting ? 'Starting…' : 'Debate in progress…'}
+                                </span>
+                            ) : 'Run analysis'}
+                        </Button>
+                    </div>
+                    <p className="small text-muted mt-3 mb-0">
+                        The thresholds setting does not change how the agents analyse; it only sets how strict the final Buy/Sell rules are. Press Ctrl/Cmd + K to focus the ticker box.
+                    </p>
+                </Form>
 
-                <div className="d-grid justify-content-center">
-                    <Button
-                        variant="primary"
-                        size="lg"
-                        type="submit"
-                        disabled={loading}
-                        className="rounded-pill py-3 px-5 fw-bold fs-5 shadow-lg position-relative overflow-hidden btn-glow"
-                        style={{ minWidth: '250px' }}
-                    >
-                        {loading ? (
-                            <div className="d-flex align-items-center justify-content-center gap-2">
-                                <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />
-                                <span>Coordinating Agents...</span>
-                            </div>
-                        ) : (
-                            'Initiate Debate'
-                        )}
-                    </Button>
-                </div>
-            </Form>
-
-            {error && <Alert variant="danger" className="mt-4 text-center rounded-3 border-0 bg-danger-subtle text-danger mx-auto" style={{ maxWidth: '500px' }}>{error}</Alert>}
-
-            <div className="text-center mt-5">
-                <small className="text-muted opacity-50 ls-1 text-uppercase fw-bold" style={{ fontSize: '0.7rem' }}>
-                    Powered by Kai-Consensus Protocol 2.0
-                </small>
+                {startError && (
+                    <div className="kai-alert neg mt-3" role="alert" data-testid="start-error">{startError}</div>
+                )}
             </div>
-        </div>
+        </section>
     );
 };
 

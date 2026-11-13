@@ -66,3 +66,6 @@ traces/
 # Temporary files
 *.tmp
 temp/
+
+# runtime output: signed verdict packets
+alpha_packets/

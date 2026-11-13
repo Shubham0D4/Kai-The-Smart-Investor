@@ -23,7 +23,12 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^[A-Z_]', ignoreRestSiblings: true }],
     },
+  },
+  {
+    // Tests run under Node (vitest): they read files and use process.cwd()
+    files: ['src/test/**/*.{js,jsx}'],
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
   },
 ])

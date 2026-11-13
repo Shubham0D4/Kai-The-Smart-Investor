@@ -3,7 +3,6 @@ PHASE4_PLAN.md §9, tests J1-J12: the judge end to end on offline fixtures with 
 Includes an agent stating a number that is not in the fetched data (J2, J3).
 """
 
-import asyncio
 import json
 import os
 
@@ -237,68 +236,60 @@ def test_j9_personas_differ_only_through_thresholds(debate, favourable_gates):
 
 # ---------------------------------------------------------------- J10-J12: gateway
 
+class ForcedSigma:
+    """The real Sigma, with the recommendation/confidence overridden (to hit a HITL threshold)."""
+    def __init__(self, force):
+        self.real = SigmaAgent(llm_client=FakeLLMClient(responses="Narrative."))
+        self.force = force
+
+    def evaluate_debate(self, path, persona=None, quant_report=None):
+        ev = self.real.evaluate_debate(path, persona=persona, quant_report=quant_report)
+        ev["final_recommendation"].update(self.force)
+        return ev
+
+
 @pytest.fixture
-def gateway_run(monkeypatch, make_responder, tmp_path):
-    import gateway.app as app
-    from gateway.schema import AnalysisRequest, PersonaType
-    logs = []
+def gateway_run(make_gateway, wait_status):
+    """Run one analysis through the gateway app and return the final /status body."""
+    from fastapi.testclient import TestClient
 
-    def run(stance="neutral", confidence=55, force=None, persona=PersonaType.ZEN):
-        monkeypatch.setattr(app, "DebateCoordinator", lambda t, p: DebateCoordinator(
-            t, p, llm_client=FakeLLMClient(responses=make_responder(stance=stance, confidence=confidence))))
-        real = SigmaAgent(llm_client=FakeLLMClient(responses="Narrative."))
-
-        class Forced:
-            def evaluate_debate(self, path, persona=None, quant_report=None):
-                ev = real.evaluate_debate(path, persona=persona, quant_report=quant_report)
-                if force:
-                    ev["final_recommendation"].update(force)
-                return ev
-        monkeypatch.setattr(app, "sigma_agent", Forced())
-        monkeypatch.setattr(app.ap2_handler, "save_alpha_packet", lambda p, *a, **k: str(tmp_path / "p.json"))
-
-        sid = f"sess_{len(logs)}"
-        app.sessions[sid] = {"session_id": sid, "ticker": "AAPL", "status": "running", "created_at": "now"}
-        asyncio.run(app.run_analysis(sid, AnalysisRequest(ticker="AAPL", persona=persona, user_id="u1")))
-        session = app.sessions[sid]
-        logs.append(session.get("debate_log"))
-        return session
-    yield run
-    for f in logs:
-        if f and os.path.exists(f):
-            os.remove(f)
+    def run(stance="neutral", confidence=55, force=None, persona="zen"):
+        kw = {"sigma": ForcedSigma(force)} if force else {}
+        app = make_gateway(stance=stance, confidence=confidence, **kw)
+        with TestClient(app) as client:
+            sid = client.post("/api/v1/analyze", json={"ticker": "AAPL", "persona": persona}).json()["session_id"]
+            body = wait_status(client, sid)
+        assert body["status"] != "failed", body.get("error")
+        return body, app
+    return run
 
 
 def test_j10_gateway_hold_is_a_notification_without_confidence(gateway_run):
-    from gateway.schema import AlphaPacket, HITLMode, AnalysisStatus
-    session = gateway_run()
-    assert session["status"] == AnalysisStatus.COMPLETED, session.get("error")
-    assert session["hitl_mode"] == HITLMode.PASSIVE
-    assert session["notification"]["type"] == "info" and session["notification"]["confidence"] is None
-    packet = AlphaPacket(**session["alpha_packet"])
-    assert packet.recommendation.value == "Hold" and packet.confidence is None
+    body, _ = gateway_run()
+    assert body["status"] == "completed" and body["hitl_mode"] == "passive"
+    assert body["notification"]["type"] == "info" and body["notification"]["confidence"] is None
+    packet = body["alpha_packet"]
+    assert packet["recommendation"] == "Hold" and packet["confidence"] is None
 
 
 @pytest.mark.parametrize("conf, status, mode", [(65.0, "waiting_approval", "active"), (55.0, "completed", "passive")])
 def test_j11_gateway_buy_confidence_threshold(gateway_run, conf, status, mode):
-    session = gateway_run(force={"recommendation": "Buy", "confidence": conf})
-    assert session["status"].value == status and session["hitl_mode"].value == mode
+    body, _ = gateway_run(force={"recommendation": "Buy", "confidence": conf})
+    assert body["status"] == status and body["hitl_mode"] == mode
     if mode == "active":
-        assert session["step_up_challenge"]["recommendation"] == "Buy"
+        assert body["step_up_challenge"]["recommendation"] == "Buy"
     else:
-        assert session["notification"]["type"] == "warning"
-        assert session["notification"]["message"].startswith("Low-confidence Buy")
+        assert body["notification"]["type"] == "warning"
+        assert body["notification"]["message"].startswith("Low-confidence Buy")
 
 
 def test_j12_alpha_packet_carries_integrity_risks_and_valid_signature(gateway_run):
-    from gateway.app import ap2_handler
-    session = gateway_run()
-    packet = session["alpha_packet"]
-    ev = session["evaluation"]
+    body, app = gateway_run()
+    packet, ev = body["alpha_packet"], body["sigma"]
     assert set(packet["quality_scores"]) == {"faithfulness", "integrity", "overall"}
     assert packet["quality_scores"]["integrity"] == ev["evaluation"]["integrity_score"]
     assert packet["key_risks"] == ev["final_recommendation"]["key_risks"] == ["charlie: canned risk"]
     assert packet["verdict_detail"]["gates"]
-    assert ap2_handler.verify_alpha_packet(packet)
-    tampered = dict(packet, recommendation="Buy")
-    assert not ap2_handler.verify_alpha_packet(tampered)
+    ap2 = app.state.ctx.ap2
+    assert ap2.verify_alpha_packet(packet)
+    assert not ap2.verify_alpha_packet(dict(packet, recommendation="Buy"))

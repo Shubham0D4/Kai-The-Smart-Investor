@@ -132,7 +132,7 @@
             ]
         }
     },
-    "model": "gemini-2.0-flash-exp",
+    "model": "gemini-2.5-flash",
     "author": "Kai - Economist Team",
     "tags": [
         "sentiment-analysis",

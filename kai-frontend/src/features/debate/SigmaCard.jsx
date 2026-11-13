@@ -1,197 +1,188 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Card, ProgressBar, Badge, Row, Col } from 'react-bootstrap';
-import { Gavel, TrendingUp, TrendingDown, MinusCircle, CheckCircle } from 'lucide-react';
-import { useCommittee } from '../../context/CommitteeContext';
+import React, { useEffect, useState } from 'react';
+import { AlertTriangle, CheckCircle2, Circle, MinusCircle, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
+import { useCommittee } from '../../context/committee';
+import Chip from '../../components/Chip';
+import { getQuote } from '../../services/api';
+import { AGENTS, DASH, score } from '../../utils/format';
 
-const SigmaCard = () => {
-    const { finalReport } = useCommittee();
+const SIGNAL = {
+    Buy: { icon: TrendingUp, tone: 'pos' },
+    Sell: { icon: TrendingDown, tone: 'neg' },
+    Hold: { icon: MinusCircle, tone: 'neutral' },
+    'No Verdict': { icon: AlertTriangle, tone: 'warn' },
+};
 
-    if (!finalReport) return null;
+const conf = (c) => (c === null || c === undefined ? DASH : `${Math.round(c)}%`);
 
-    const { confidence, summary, ticker, agentsMissing = [], warnings = [], reason } = finalReport;
-    const scores = finalReport.scores || { faithfulness: 0, integrity: 0 };
-    // Backend sends "Buy" / "Hold" / "Sell" / "No Verdict"; confidence is null for Hold and No Verdict
-    const signal = (finalReport.signal || '').toUpperCase();
-    const hasConfidence = confidence !== null && confidence !== undefined;
-
-    // Dynamic Styling Logic
-    const isStrongBuy = signal === 'BUY' && hasConfidence && confidence >= 60;
-    const isStrongSell = signal === 'SELL' && hasConfidence && confidence >= 60;
-
-    // Simulated Live Market Data
-    const [currentPrice, setCurrentPrice] = React.useState(null);
-    const [dayChange, setDayChange] = React.useState(null);
-
-    React.useEffect(() => {
-        // Initialize with random base price if not available
-        // In a real app, this would come from the initial payload or an API
-        const basePrice = Math.random() * 200 + 100; // Mock price between 100 and 300
-        setCurrentPrice(basePrice);
-        setDayChange((Math.random() * 4) - 2); // -2% to +2%
-
-        const interval = setInterval(() => {
-            setCurrentPrice(prev => {
-                const fluctuation = (Math.random() - 0.5) * 0.2; // Small fluctuation
-                return prev + fluctuation;
-            });
-        }, 3000);
-
-        return () => clearInterval(interval);
+/** Real quote of the ticker (or an honest "unavailable" with the reason). */
+const LivePrice = ({ ticker }) => {
+    const [state, setState] = useState({ loading: true });
+    useEffect(() => {
+        let cancelled = false;
+        getQuote(ticker)
+            .then((quote) => !cancelled && setState({ quote }))
+            .catch((error) => !cancelled && setState({ error: error.message }));
+        return () => { cancelled = true; };
     }, [ticker]);
 
-    let borderColor = 'border-secondary';
-    let glowClass = '';
-    let signalIcon = <MinusCircle />;
-    let signalColor = 'text-muted';
+    if (state.loading) return <div className="small text-muted">Loading quote…</div>;
+    if (state.error) return <div className="small text-muted">Quote unavailable: {state.error}</div>;
+    const { quote } = state;
+    return (
+        <div>
+            <div style={{ fontSize: '1.75rem', fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.15 }}>${quote.price}</div>
+            <div className={`small fw-semibold ${quote.is_positive ? 'pos-text' : 'neg-text'}`}>{quote.change} today</div>
+        </div>
+    );
+};
 
-    if (signal === 'BUY') {
-        signalIcon = <TrendingUp size={32} />;
-        signalColor = 'text-success';
-        borderColor = 'border-success';
-        if (isStrongBuy) glowClass = 'shadow-lg border-2 shadow-success';
-    } else if (signal === 'SELL') {
-        signalIcon = <TrendingDown size={32} />;
-        signalColor = 'text-danger';
-        borderColor = 'border-danger';
-        if (isStrongSell) glowClass = 'shadow-lg border-2 shadow-danger';
-    }
+const Meter = ({ label, value }) => (
+    <div className="mb-3">
+        <div className="d-flex justify-content-between mb-1">
+            <span className="small" style={{ color: 'var(--text-2)' }}>{label}</span>
+            <span className="small fw-semibold">{score(value)}</span>
+        </div>
+        <div className="kai-meter"><span style={{ width: `${Math.max(0, Math.min(100, value))}%` }} /></div>
+    </div>
+);
+
+/** Sigma's verdict. Every number here was computed in code; the LLM only wrote the narrative. */
+const SigmaCard = () => {
+    const { session, sigma, debate } = useCommittee();
+    if (!sigma) return null;
+
+    const rec = sigma.final_recommendation;
+    const quality = sigma.evaluation;
+    const sig = SIGNAL[rec.recommendation] || SIGNAL['No Verdict'];
+    const Icon = sig.icon;
+    const hasConfidence = rec.confidence !== null && rec.confidence !== undefined;
+    const adjusted = hasConfidence && rec.confidence_before_quant !== null && rec.confidence_before_quant !== undefined
+        && Math.round(rec.confidence_before_quant) !== Math.round(rec.confidence);
 
     return (
-        <motion.div
-            initial={{ y: 50, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 100, damping: 20 }}
-            className="mt-5 mb-5"
-        >
-            <Card className={`glass-panel border-0 ${glowClass}`} style={{ transition: 'all 0.5s ease-in-out', overflow: 'hidden' }}>
-                {/* Gradient Header */}
-                <div className="p-4" style={{
-                    background: `linear-gradient(135deg, ${signal === 'BUY' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'} 0%, transparent 100%)`,
-                    borderBottom: '1px solid var(--glass-border)'
-                }}>
-                    <div className="d-flex justify-content-between align-items-center">
-                        <div className="d-flex align-items-center gap-3">
-                            <div className="p-2 rounded-circle bg-white shadow-sm position-relative">
-                                <Gavel size={24} className="text-dark position-relative z-1" />
-                                <span className="position-absolute top-0 start-0 w-100 h-100 bg-primary rounded-circle opacity-50 animate-ping" style={{ zIndex: 0 }}></span>
-                            </div>
-                            <div>
-                                <h6 className="text-uppercase text-muted fw-bold mb-0 ls-1" style={{ fontSize: '0.75rem' }}>Final Verdict</h6>
-                                <h3 className="mb-0 fw-bold">{ticker}</h3>
-                            </div>
+        <section className="kai-card kai-fade" data-testid="sigma-card">
+            <div className="kai-card-head">
+                <div>
+                    <div className="kai-label mb-1">Final verdict · {sigma.persona} thresholds</div>
+                    <h2 className="mb-0" style={{ fontSize: '1.5rem' }}>{sigma.ticker}</h2>
+                </div>
+                {session?.alpha_packet && (
+                    <Chip tone="plain" title="Ed25519-signed record of this verdict, its inputs and the quant report">
+                        <ShieldCheck size={14} /> Signed alpha packet
+                    </Chip>
+                )}
+            </div>
+
+            <div className="kai-card-body">
+                <div className="row g-4">
+                    <div className="col-lg-5">
+                        <div className="kai-label">Recommendation</div>
+                        <div className={`kai-verdict-pill ${sig.tone}`} data-testid="verdict"><Icon size={30} /> {rec.recommendation}</div>
+                        <div className="mt-3 d-flex align-items-baseline gap-2 flex-wrap" data-testid="confidence">
+                            {hasConfidence
+                                ? <><span style={{ fontSize: '1.5rem', fontWeight: 700 }}>{conf(rec.confidence)}</span>{' '}<span className="text-muted">confidence</span></>
+                                : <span className="text-muted">No confidence (only Buy and Sell carry one)</span>}
                         </div>
-                        <Badge bg="dark" className="d-flex align-items-center gap-2 px-3 py-2 rounded-pill shadow-sm">
-                            <CheckCircle size={14} className="text-success" />
-                            <span>AP2 Verifiable</span>
-                        </Badge>
+                        {adjusted && (
+                            <div className="small text-muted mt-1">
+                                {conf(rec.confidence_before_quant)} before the quant report × agreement {rec.quant_agreement?.toFixed(2)}
+                                {' '}× contradictions {rec.contradiction_factor?.toFixed(2)}
+                            </div>
+                        )}
+                        <div className="small text-muted mt-1">Debate score {rec.score >= 0 ? '+' : ''}{rec.score.toFixed(2)} on a scale of −1 (bearish) to +1 (bullish)</div>
+                    </div>
+
+                    <div className="col-lg-4">
+                        <div className="kai-label">Trust &amp; verification</div>
+                        <Meter label="Argument faithfulness" value={quality.faithfulness_score} />
+                        <Meter label="Debate integrity" value={quality.integrity_score} />
+                        <div className="small text-muted">Faithfulness: share of numeric claims that match the fetched data. Integrity: critiques answered and failed claims corrected.</div>
+                    </div>
+
+                    <div className="col-lg-3">
+                        <div className="kai-label">Last price</div>
+                        <LivePrice ticker={sigma.ticker} />
                     </div>
                 </div>
 
-                <Card.Body className="p-xl-5 p-4 text-center">
-                    <Row className="align-items-center g-4"> {/* Use g-4 for better spacing */}
-                        <Col lg={4} className="position-relative px-4 border-end border-light-subtle">
-                            <div className="d-flex flex-column justify-content-center py-3">
-                                <h6 className="text-uppercase text-secondary fw-bold ls-1 mb-4" style={{ fontSize: '0.8rem' }}>AI Recommendation</h6>
-                                <div className={`display-2 fw-black ${signalColor} mb-3 d-flex justify-content-center align-items-center gap-2 filter-drop-shadow`}>
-                                    {signalIcon} {signal}
-                                </div>
-                                <div className="mt-auto">
-                                    <Badge bg={hasConfidence && confidence >= 60 ? 'success' : 'warning'} pill className="px-4 py-2 fs-6 opacity-90 shadow-sm fw-medium">
-                                        {hasConfidence ? `${confidence}% Confidence` : '— Confidence'}
-                                    </Badge>
-                                </div>
-                            </div>
-                        </Col>
-
-                        <Col lg={4} className="text-center position-relative px-4 border-end border-light-subtle">
-                            <div className="d-flex flex-column justify-content-center py-3">
-                                <h6 className="text-uppercase text-secondary fw-bold ls-1 mb-4" style={{ fontSize: '0.8rem' }}>Live Market Data</h6>
-                                {currentPrice ? (
-                                    <div className="animate-fade-in my-auto">
-                                        <div className="display-2 fw-black font-monospace tracking-tight mb-2" style={{ color: 'var(--text-primary)' }}>
-                                            ${currentPrice.toFixed(2)}
-                                        </div>
-                                        <div className={`d-inline-flex align-items-center gap-2 px-4 py-2 rounded-pill ${dayChange >= 0 ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'}`}>
-                                            <span className="fw-bold fs-4">{dayChange >= 0 ? '▲' : '▼'}</span>
-                                            <span className="fw-bold fs-5">{Math.abs(dayChange).toFixed(2)}%</span>
-                                        </div>
-                                        <div className="mt-4 text-secondary opacity-75 d-flex align-items-center justify-content-center gap-1" style={{ fontSize: '0.8rem' }}>
-                                            <div className="spinner-grow spinner-grow-sm text-success" style={{ width: '8px', height: '8px' }} role="status"></div>
-                                            Real-time Feed Active
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="text-muted fst-italic my-auto fs-5">Connecting to exchange...</div>
-                                )}
-                            </div>
-                        </Col>
-
-                        <Col lg={4} className="px-4">
-                            <div className="d-flex flex-column justify-content-center py-3">
-                                <h6 className="text-uppercase text-secondary fw-bold ls-1 mb-4 text-center" style={{ fontSize: '0.8rem' }}>Trust & Verification</h6>
-
-                                <div className="mb-4 text-start">
-                                    <div className="d-flex justify-content-between mb-2">
-                                        <span className="small fw-semibold text-secondary">Argument Faithfulness</span>
-                                        <span className="fw-bold text-gradient">{scores.faithfulness}%</span>
-                                    </div>
-                                    <ProgressBar
-                                        now={scores.faithfulness}
-                                        variant={scores.faithfulness > 80 ? "success" : "warning"}
-                                        style={{ height: '10px', borderRadius: '5px' }}
-                                        className="bg-light shadow-inner"
-                                    />
-                                </div>
-
-                                <div className="text-start">
-                                    <div className="d-flex justify-content-between mb-2">
-                                        <span className="small fw-semibold text-secondary">Debate Integrity</span>
-                                        <span className="fw-bold text-gradient">{scores.integrity}%</span>
-                                    </div>
-                                    <ProgressBar
-                                        now={scores.integrity}
-                                        variant={scores.integrity > 80 ? "info" : "warning"}
-                                        style={{ height: '10px', borderRadius: '5px' }}
-                                        className="bg-light shadow-inner"
-                                    />
-                                </div>
-                            </div>
-                        </Col>
-                    </Row>
-                </Card.Body>
-
-                {(agentsMissing.length > 0 || warnings.length > 0 || reason) && (
-                    <div className="alert alert-warning m-0 rounded-0 small" role="alert">
-                        {reason && <div className="fw-bold">No verdict: {reason}</div>}
-                        {agentsMissing.length > 0 && (
-                            <div className="fw-semibold">Verdict based on fewer agents. Missing: {agentsMissing.join(', ')}</div>
-                        )}
-                        {warnings.length > 0 && (
-                            <ul className="mb-0 ps-3">
-                                {warnings.map((w, i) => <li key={i}>{w}</li>)}
-                            </ul>
-                        )}
+                {rec.contradictions.length > 0 && (
+                    <div className="kai-alert warn mt-4" role="alert" data-testid="contradictions">
+                        <strong>Contradicts the quant report.</strong> Confidence was reduced.
+                        <ul className="mb-0 mt-1 ps-3">
+                            {rec.contradictions.map((c) => (
+                                <li key={`${c.agent}-${c.field}`}>
+                                    {AGENTS[c.agent]?.name || c.agent} is {c.stance}, but “{debate?.quant_report?.fields?.[c.field]?.label || c.field}” is {(c.value * 100).toFixed(0)}%
+                                </li>
+                            ))}
+                        </ul>
                     </div>
                 )}
+            </div>
 
-                <div className="p-4" style={{ backgroundColor: 'var(--bg-primary)', borderTop: '1px solid var(--border)' }}>
-                    <h6 className="fw-bold mb-2 d-flex align-items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                        <span className="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style={{ width: '20px', height: '20px', fontSize: '10px' }}>i</span>
-                        Executive Summary
-                    </h6>
-                    <p className="mb-0 text-secondary lh-lg" style={{ fontFamily: 'Inter, sans-serif', fontSize: '0.95rem' }}>
-                        {summary}
-                    </p>
+            <hr className="kai-divider" />
+            <div className="kai-card-body">
+                <div className="row g-4">
+                    <div className="col-md-6">
+                        <div className="kai-label">Decision gates</div>
+                        <ul className="list-unstyled mb-0 small">
+                            {rec.gates.map((g) => (
+                                <li key={g.name} className="d-flex gap-2 align-items-start mb-2">
+                                    {g.passed
+                                        ? <CheckCircle2 size={16} className="pos-text flex-shrink-0 mt-1" />
+                                        : <Circle size={16} className="text-muted flex-shrink-0 mt-1" />}
+                                    <span>{g.note}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                    <div className="col-md-6">
+                        <div className="kai-label">Same debate, each persona’s thresholds</div>
+                        <table className="kai-table">
+                            <thead><tr><th>Persona</th><th>Verdict</th><th className="num">Confidence</th></tr></thead>
+                            <tbody>
+                                {Object.entries(sigma.verdicts_by_persona).map(([p, v]) => (
+                                    <tr key={p} style={p === sigma.persona ? { fontWeight: 650 } : undefined}>
+                                        <td className="text-capitalize">{p}{p === sigma.persona && <span className="muted"> (selected)</span>}</td>
+                                        <td>{v.recommendation}</td>
+                                        <td className="num">{conf(v.confidence)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="col-md-6">
+                        <div className="kai-label">Verified supporting points</div>
+                        {rec.supporting_points.length
+                            ? <ul className="small mb-0 ps-3">{rec.supporting_points.map((p) => <li key={p}>{p}</li>)}</ul>
+                            : <span className="small text-muted">none</span>}
+                    </div>
+                    <div className="col-md-6">
+                        <div className="kai-label">Risks raised by the agents</div>
+                        {rec.key_risks.length
+                            ? <ul className="small mb-0 ps-3">{rec.key_risks.map((r) => <li key={r}>{r}</li>)}</ul>
+                            : <span className="small text-muted">none</span>}
+                    </div>
                 </div>
+            </div>
 
-                {isStrongBuy && (
-                    <div className="bg-success text-white text-center fw-bold py-2 small ls-1 text-uppercase">
-                        🚀 High Conviction Opportunity Detected
+            {(rec.agents_missing.length > 0 || rec.warnings.length > 0 || rec.reason) && (
+                <div className="px-4 pb-3">
+                    <div className="kai-alert warn" role="status" data-testid="verdict-warnings">
+                        {rec.reason && <div><strong>No verdict:</strong> {rec.reason}</div>}
+                        {rec.agents_missing.length > 0 && (
+                            <div><strong>Verdict based on fewer agents.</strong> Not counted: {rec.agents_missing.join(', ')}</div>
+                        )}
+                        {rec.warnings.length > 0 && <ul className="mb-0 mt-1 ps-3">{rec.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
                     </div>
-                )}
-            </Card>
-        </motion.div>
+                </div>
+            )}
+
+            <hr className="kai-divider" />
+            <div className="kai-card-body">
+                <div className="kai-label">Explanation <span className="text-lowercase fw-normal" style={{ letterSpacing: 0 }}>(written by the LLM; it cannot change the verdict)</span></div>
+                <p className="mb-0" style={{ whiteSpace: 'pre-wrap', color: 'var(--text)' }}>{rec.analysis}</p>
+            </div>
+        </section>
     );
 };
 

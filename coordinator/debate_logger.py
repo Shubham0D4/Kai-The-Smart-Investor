@@ -5,6 +5,7 @@ Provides structured logging with grounding sources and formula traceability.
 
 import json
 import os
+import uuid
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from pathlib import Path
@@ -27,7 +28,9 @@ class DebateLogger:
         self.ticker = ticker.upper()
         self.persona = persona
         self.log_dir = log_dir
-        self.debate_id = f"{self.ticker}_{self.persona}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # The short random suffix keeps concurrent debates for the same ticker in separate files.
+        self.debate_id = (f"{self.ticker}_{self.persona}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                          f"_{uuid.uuid4().hex[:6]}")
         
         # Create log directory if it doesn't exist
         Path(log_dir).mkdir(parents=True, exist_ok=True)
@@ -47,12 +50,27 @@ class DebateLogger:
             }
         }
     
+    @property
+    def log_path(self) -> str:
+        """Where this debate's log lives (known before the first write)."""
+        return os.path.join(self.log_dir, f"{self.debate_id}.json")
+
+    def _write(self):
+        """Write the log atomically: readers (the gateway polls it while the debate runs) see
+        either the previous complete file or the new complete file, never a partial one."""
+        tmp = f"{self.log_path}.{uuid.uuid4().hex[:6]}.tmp"
+        with open(tmp, 'w') as f:
+            json.dump(self.debate_log, f, indent=2)
+        os.replace(tmp, self.log_path)
+
     def _save_log(self):
         """Save the current log state to disk."""
-        log_file = os.path.join(self.log_dir, f"{self.debate_id}.json")
-        with open(log_file, 'w') as f:
-            json.dump(self.debate_log, f, indent=2)
-        self.log_file = log_file
+        self._write()
+        self.log_file = self.log_path
+
+    def flush(self):
+        """Public alias: make sure the log file exists and is current."""
+        self._save_log()
 
     def log_system_message(self, message: str):
         """Log a system message for real-time feedback."""
@@ -67,6 +85,10 @@ class DebateLogger:
             if "system_logs" not in self.debate_log["rounds"][-1]:
                 self.debate_log["rounds"][-1]["system_logs"] = []
             self.debate_log["rounds"][-1]["system_logs"].append(log_entry)
+        else:
+            # Before round 1 starts (data fetching, quant report): keep them too, so a client
+            # reading the log sees what the debate is doing from the first second.
+            self.debate_log.setdefault("pre_round_logs", []).append(log_entry)
         
         # Also print to console
         print(f"[SYSTEM] {message}")
@@ -273,9 +295,8 @@ class DebateLogger:
         self.debate_log["metadata"]["duration_seconds"] = duration
         
         # Save to file
-        log_file = os.path.join(self.log_dir, f"{self.debate_id}.json")
-        with open(log_file, 'w') as f:
-            json.dump(self.debate_log, f, indent=2)
+        self._write()
+        log_file = self.log_file = self.log_path
         
         print(f"\n{'='*80}")
         print(f"DEBATE COMPLETE")

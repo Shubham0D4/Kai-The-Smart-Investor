@@ -1,38 +1,28 @@
 import React from 'react';
-import { useCommittee } from '../context/CommitteeContext';
-import { Terminal, Bot, Server, Loader2 } from 'lucide-react';
-import { Badge } from 'react-bootstrap';
-import '../styles/tool-indicator.scss'; // We'll create this next
+import { Bot, Loader2 } from 'lucide-react';
+import { useCommittee } from '../context/committee';
+import { AGENTS, AGENT_IDS } from '../utils/format';
+import '../styles/tool-indicator.scss';
 
+/** A floating pill while a debate runs: which agent is working and the latest step. */
 const ToolCallIndicator = () => {
-    const { activeToolCall } = useCommittee();
+    const { session, debate } = useCommittee();
+    if (session?.status !== 'running') return null;
 
-    if (!activeToolCall) return null;
-
-    const getAgentColor = (agent) => {
-        switch (agent?.toLowerCase()) {
-            case 'charlie': return 'primary';
-            case 'delta': return 'warning'; // Orange-ish
-            case 'gamma': return 'success';
-            case 'sigma': return 'danger';
-            default: return 'secondary';
-        }
-    };
+    const working = AGENT_IDS.find((id) => debate?.agents?.[id]?.state === 'analyzing');
+    const who = working ? AGENTS[working].name : 'Coordinator';
+    const what = session.progress || 'Working…';
 
     return (
-        <div className="tool-call-indicator-container">
-            <div className={`tool-pill shadow-lg border border-${getAgentColor(activeToolCall.agent)}`}>
+        <div className="tool-call-indicator-container" data-testid="tool-indicator">
+            <div className="tool-pill">
                 <div className="d-flex align-items-center gap-2">
-                    {/* Icon based on tool type (simplified logic) */}
-                    <Bot size={18} className={`text-${getAgentColor(activeToolCall.agent)}`} />
-
-                    <div className="d-flex flex-column">
-                        <span className="small fw-bold text-uppercase text-muted" style={{ fontSize: '0.65rem' }}>
-                            {activeToolCall.agent}
-                        </span>
-                        <span className="fw-semibold d-flex align-items-center gap-2">
-                            {activeToolCall.tool}
-                            <Loader2 size={12} className="spin-animation" />
+                    <Bot size={18} style={{ color: 'var(--accent)' }} />
+                    <div className="d-flex flex-column" style={{ maxWidth: 320 }}>
+                        <span className="small fw-bold text-uppercase text-muted" style={{ fontSize: '0.65rem' }}>{who}</span>
+                        <span className="fw-semibold d-flex align-items-center gap-2 text-truncate">
+                            <span className="text-truncate">{what}</span>
+                            <Loader2 size={12} className="spin-animation flex-shrink-0" />
                         </span>
                     </div>
                 </div>

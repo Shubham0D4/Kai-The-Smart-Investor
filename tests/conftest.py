@@ -4,66 +4,23 @@ Pytest configuration and fixtures.
 
 import os
 import sys
-import pytest
-from unittest.mock import MagicMock, patch
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-# --- Hermetic environment: must be set before any gateway/judge import --------
 import tempfile
 
-os.environ["GATEWAY_SECRET_KEY"] = "test-only-secret-not-for-production"
+import pytest
+from fastapi.testclient import TestClient
+
+# --- Hermetic environment: must be set before any gateway/judge import --------
 _AP2_DIR = tempfile.mkdtemp(prefix="kai-ap2-test-")
 os.environ["AP2_PRIVATE_KEY_PATH"] = os.path.join(_AP2_DIR, "ap2_private_key.pem")
 os.environ.pop("AP2_PUBLIC_KEY_PATH", None)
 # Empty (not unset) so load_dotenv() will not pull real keys in from a .env file
 os.environ["GOOGLE_API_KEY"] = ""
 os.environ["GROQ_API_KEY"] = ""
+for _var in ("GATEWAY_HOST", "GATEWAY_PORT", "GATEWAY_CORS_ORIGINS", "KAI_DB_URL", "KAI_MAX_CONCURRENT_DEBATES"):
+    os.environ.pop(_var, None)
 
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
-from gateway.database import Base, get_db
-from gateway.app import app
-from gateway import models
-
-from sqlalchemy.pool import StaticPool
-
-# Use in-memory SQLite for tests
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
-
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, 
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool
-)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-@pytest.fixture(scope="function")
-def db_session():
-    """Create a fresh database session for each test."""
-    Base.metadata.create_all(bind=engine)
-    session = TestingSessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
-        Base.metadata.drop_all(bind=engine)
-
-@pytest.fixture(scope="function")
-def client(db_session):
-    """Test client with database dependency override."""
-    def override_get_db():
-        try:
-            yield db_session
-        finally:
-            pass
-    
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
 
 # --- Offline mode: fake LLM, recorded SEC / news / yfinance fixtures -----------
 import json
@@ -353,3 +310,89 @@ def make_valid_output():
 def schema_llm():
     """FakeLLMClient that answers round 1, 2 and 3 prompts with schema-valid JSON."""
     return FakeLLMClient(responses=_schema_responder)
+
+
+# --- Gateway: an app per test against a temporary SQLite file ------------------------------------
+import threading
+import time
+
+from coordinator.server import DebateCoordinator
+from gateway.app import create_app
+from judge.sigma_agent import SigmaAgent
+
+
+@pytest.fixture
+def make_gateway(tmp_path, monkeypatch, make_responder):
+    """Factory for gateway apps on a temp database. Building a second app with the same db_name
+    simulates a server restart. The working directory is the temp dir, so debate logs and alpha
+    packets never touch the repo."""
+    monkeypatch.chdir(tmp_path)
+
+    def make(db_name="kai.db", stance="neutral", confidence=55, responder=None, sigma_reply="Narrative.",
+             coordinator_factory=None, **kw):
+        def factory(ticker, persona):
+            llm = FakeLLMClient(responses=responder or make_responder(stance=stance, confidence=confidence))
+            return DebateCoordinator(ticker, persona, llm_client=llm)
+        sigma = kw.pop("sigma", None) or SigmaAgent(llm_client=FakeLLMClient(responses=sigma_reply))
+        return create_app(db_url=f"sqlite:///{tmp_path / db_name}",
+                          coordinator_factory=coordinator_factory or factory, sigma=sigma, **kw)
+    return make
+
+
+@pytest.fixture
+def client(make_gateway):
+    """TestClient on a fresh gateway (lifespan runs, so tables exist)."""
+    with TestClient(make_gateway()) as c:
+        yield c
+
+
+def wait_for_status(client, session_id, wanted=("completed", "waiting_approval", "failed", "rejected"),
+                    timeout=20.0):
+    """Poll /status until the session reaches one of the wanted statuses."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        body = client.get(f"/api/v1/status/{session_id}").json()
+        if body["status"] in wanted:
+            return body
+        time.sleep(0.05)
+    raise AssertionError(f"session {session_id} did not reach {wanted} in {timeout}s; last: {body['status']}")
+
+
+@pytest.fixture
+def wait_status():
+    return wait_for_status
+
+
+def call_with_timeout(fn, timeout=5.0):
+    """Run fn() in a thread and fail (instead of hanging) if it does not return in time.
+    Threads that timed out are kept in call_with_timeout.stuck so a test can release whatever
+    blocks them and join them before closing its TestClient (closing with a request in flight
+    deadlocks)."""
+    box = {}
+    t = threading.Thread(target=lambda: box.setdefault("v", fn()), daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        call_with_timeout.stuck.append(t)
+        raise AssertionError(f"call did not return within {timeout}s: the event loop is blocked")
+    return box["v"]
+
+
+call_with_timeout.stuck = []
+
+
+def join_stuck(timeout=30.0):
+    for t in call_with_timeout.stuck:
+        t.join(timeout)
+    call_with_timeout.stuck.clear()
+
+
+@pytest.fixture
+def timed_call():
+    call_with_timeout.stuck.clear()
+    return call_with_timeout
+
+
+@pytest.fixture
+def join_stuck_threads():
+    return join_stuck

@@ -1,240 +1,105 @@
-import React, { useEffect, useRef } from 'react';
-import { useCommittee } from '../../context/CommitteeContext';
-import { ListGroup, Badge, Card, Button } from 'react-bootstrap';
-import { User, Shield, Zap, Scale, Terminal, Gavel, Download } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
+import React, { useRef } from 'react';
+import { Download } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { useCommittee } from '../../context/committee';
+import Chip from '../../components/Chip';
+import { clock } from '../../utils/format';
 
-import CitationPopover from '../../components/CitationPopover';
+const AGENT_LABEL = { charlie: 'Charlie', delta: 'Delta', gamma: 'Gamma', sigma: 'Sigma', system: 'System' };
+const AGENT_TONE = { charlie: 'accent', delta: 'info', gamma: 'pos', sigma: 'warn', system: 'neutral' };
 
-const DebateFeed = () => {
-    const { debateLogs } = useCommittee();
-    const bottomRef = useRef(null);
-    const feedRef = useRef(null);
+const AgentBadge = ({ agent }) => (
+    <Chip tone={AGENT_TONE[agent] || 'neutral'} className="justify-content-center" style={{ minWidth: 64 }}>
+        {AGENT_LABEL[agent] || agent}
+    </Chip>
+);
 
-    // Auto-scroll to bottom on new log
-    useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [debateLogs]);
+const PDF_MARGIN_MM = 10;
 
-    const getAgentBadge = (agent) => {
-        const name = agent?.toLowerCase();
-        switch (name) {
-            case 'charlie':
-                return <Badge bg="primary" className="d-flex align-items-center gap-1"><Shield size={12} /> Charlie</Badge>;
-            case 'delta':
-                return <Badge bg="warning" text="dark" className="d-flex align-items-center gap-1"><Zap size={12} /> Delta</Badge>;
-            case 'gamma':
-                return <Badge bg="success" className="d-flex align-items-center gap-1"><Scale size={12} /> Gamma</Badge>;
-            case 'sigma':
-                return <Badge bg="danger" className="d-flex align-items-center gap-1"><Gavel size={12} /> Sigma</Badge>;
-            case 'user':
-                return <Badge bg="secondary" className="d-flex align-items-center gap-1"><User size={12} /> User</Badge>;
-            case 'system':
-                return <Badge bg="dark" className="d-flex align-items-center gap-1"><Terminal size={12} /> System</Badge>;
-            default:
-                return <Badge bg="info">{agent}</Badge>;
+/** Render the transcript to a multi-page PDF. */
+const exportToPDF = async (feedElement) => {
+    const container = document.createElement('div');
+    Object.assign(container.style, {
+        position: 'absolute', left: '-9999px', top: '0', width: '800px', backgroundColor: 'white',
+        padding: '40px', fontFamily: 'Arial, sans-serif',
+    });
+    const title = document.createElement('h1');
+    title.textContent = 'Debate transcript';
+    const stamp = document.createElement('p');
+    stamp.textContent = `Generated: ${new Date().toLocaleString()}`;
+    const clone = feedElement.cloneNode(true);
+    Object.assign(clone.style, { maxHeight: 'none', overflow: 'visible', border: 'none' });
+    container.append(title, stamp, clone);
+    document.body.appendChild(container);
+    try {
+        const canvas = await html2canvas(container, { scale: 2, useCORS: true, logging: false, windowWidth: 800 });
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const imgW = pageW - 2 * PDF_MARGIN_MM;
+        const imgH = (canvas.height * imgW) / canvas.width;
+        const data = canvas.toDataURL('image/png');
+        const usable = pageH - 2 * PDF_MARGIN_MM;
+        let printed = 0;
+        while (printed < imgH) {
+            if (printed > 0) pdf.addPage();
+            pdf.addImage(data, 'PNG', PDF_MARGIN_MM, PDF_MARGIN_MM - printed, imgW, imgH);
+            printed += usable;
         }
-    };
+        pdf.save(`debate-transcript-${new Date().toISOString().split('T')[0]}.pdf`);
+    } finally {
+        document.body.removeChild(container);
+    }
+};
 
-    // Helper to parse citations like [Source: 123]
-    const renderMessageWithCitations = (text) => {
-        if (!text) return null;
+/** The debate's log lines, exactly as persisted by the coordinator. */
+const DebateFeed = () => {
+    const { session, debate } = useCommittee();
+    const feedRef = useRef(null);
+    const events = debate?.events || [];
+    if (events.length === 0) return null;
+    const running = session?.status === 'running';
 
-        // Regex to find [Source: XYZ]
-        const parts = text.split(/(\[Source:\s*\w+\])/g);
-
-        return parts.map((part, index) => {
-            const match = part.match(/^\[Source:\s*(\w+)\]$/);
-            if (match) {
-                return <CitationPopover key={index} sourceId={match[1]} />;
-            }
-            return part;
-        });
-    };
-
-    // Custom markdown components for better styling
-    const markdownComponents = {
-        h1: ({ node, ...props }) => <h5 className="fw-bold text-primary mt-3 mb-2" {...props} />,
-        h2: ({ node, ...props }) => <h6 className="fw-bold text-secondary mt-2 mb-2" {...props} />,
-        h3: ({ node, ...props }) => <div className="fw-semibold text-dark mt-2 mb-1" style={{ fontSize: '0.95em' }} {...props} />,
-        p: ({ node, ...props }) => <p className="mb-2" style={{ fontSize: '0.9em', lineHeight: '1.6' }} {...props} />,
-        ul: ({ node, ...props }) => <ul className="mb-2 ps-3" style={{ fontSize: '0.9em' }} {...props} />,
-        ol: ({ node, ...props }) => <ol className="mb-2 ps-3" style={{ fontSize: '0.9em' }} {...props} />,
-        li: ({ node, ...props }) => <li className="mb-1" {...props} />,
-        strong: ({ node, ...props }) => <strong className="fw-semibold text-dark" {...props} />,
-        em: ({ node, ...props }) => <em className="fst-italic text-muted" {...props} />,
-        code: ({ node, inline, ...props }) =>
-            inline
-                ? <code className="bg-light px-1 rounded text-danger" style={{ fontSize: '0.85em' }} {...props} />
-                : <pre className="bg-light p-2 rounded border" style={{ fontSize: '0.85em', overflowX: 'auto' }}><code {...props} /></pre>,
-        blockquote: ({ node, ...props }) => <blockquote className="border-start border-3 border-primary ps-3 text-muted fst-italic my-2" {...props} />,
-    };
-
-    // Export debate feed to PDF
-    const exportToPDF = async () => {
-        if (!feedRef.current || debateLogs.length === 0) return;
-
+    const handleExport = async () => {
         try {
-            // Create a temporary container for PDF rendering
-            // We clone the feedRef content to capture the actual rendered Markdown/Styles
-            const printContainer = document.createElement('div');
-            printContainer.style.position = 'absolute';
-            printContainer.style.left = '-9999px';
-            printContainer.style.top = '0';
-            printContainer.style.width = '800px'; // Fixed width for A4 consistency
-            printContainer.style.backgroundColor = 'white';
-            printContainer.style.padding = '40px';
-            printContainer.style.fontFamily = 'Arial, sans-serif';
-            document.body.appendChild(printContainer);
-
-            // Add Header
-            const title = document.createElement('h1');
-            title.textContent = 'A2A Debate Transcript';
-            title.style.marginBottom = '10px';
-            title.style.color = '#333';
-            printContainer.appendChild(title);
-
-            const timestamp = document.createElement('p');
-            timestamp.textContent = `Generated: ${new Date().toLocaleString()}`;
-            timestamp.style.marginBottom = '30px';
-            timestamp.style.color = '#666';
-            printContainer.appendChild(timestamp);
-
-            // Clone the feed content
-            // We use cloneNode(true) to get deep copy including all children
-            const feedClone = feedRef.current.cloneNode(true);
-
-            // Adjust styles for the clone to ensure it renders fully open
-            feedClone.style.maxHeight = 'none';
-            feedClone.style.overflow = 'visible';
-            feedClone.style.border = 'none';
-
-            // Remove the scrolling anchor from the clone if present in the ref
-            // (The ref is on ListGroup, bottomRef is inside it as last item)
-            const spacer = feedClone.lastElementChild;
-            if (spacer && !spacer.innerHTML) {
-                spacer.remove();
-            }
-
-            printContainer.appendChild(feedClone);
-
-            // Generate PDF
-            const canvas = await html2canvas(printContainer, {
-                scale: 2, // Higher scale for better resolution
-                useCORS: true,
-                logging: false,
-                windowWidth: 800
-            });
-
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-
-            const imgWidth = pdfWidth - 20; // 10mm margin
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-            let heightLeft = imgHeight;
-            let position = 10; // Top margin
-
-            // First page
-            pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-            heightLeft -= (pdfHeight - 20); // Subtract available page height
-
-            // Subsequent pages
-            while (heightLeft > 0) {
-                position = heightLeft - imgHeight + 10; // Logic for subsequent pages usually involves shifting image up
-                // Actually, standard logic is: position starts at top of next page, but we show a lower slice of image
-                // But addImage takes (x, y, w, h). If y is negative, it draws the image higher up.
-
-                // Reset position for new page calculation
-                pdf.addPage();
-
-                // Calculate new 'top' position to draw the image such that the next slice shows.
-                // If we printed X amount already, we need to shift the image up by X.
-                // The 'position' variable in the standard loop is usually -1 * (page_num * visible_height) + margin
-
-                // Let's use a robust calculation:
-                // We are at page N. We want to draw the image at y = 10 - (total_height_printed_so_far)
-                const currentY = 10 - (imgHeight - heightLeft);
-
-                pdf.addImage(imgData, 'PNG', 10, currentY, imgWidth, imgHeight);
-                heightLeft -= (pdfHeight - 20);
-            }
-
-            pdf.save(`debate-transcript-${new Date().toISOString().split('T')[0]}.pdf`);
-
-            // Cleanup
-            document.body.removeChild(printContainer);
+            await exportToPDF(feedRef.current);
         } catch (error) {
             console.error('Error generating PDF:', error);
-            alert('Failed to generate PDF. Please try again.');
+            window.alert('Failed to generate the PDF.');
         }
     };
 
-    if (debateLogs.length === 0) return null;
-
-    if (debateLogs.length === 0) return null;
-
     return (
-        <Card className="glass-panel mt-4 border-0 shadow-lg" style={{ height: '700px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <Card.Header className="bg-transparent border-bottom border-light p-4 d-flex justify-content-between align-items-center">
+        <section className="kai-card" data-testid="debate-feed">
+            <div className="kai-card-head">
                 <div className="d-flex align-items-center gap-2">
-                    <div className="bg-success rounded-circle animate-pulse" style={{ width: '10px', height: '10px' }}></div>
-                    <h5 className="mb-0 fw-bold text-dark">
-                        Live Debate Feed
-                    </h5>
+                    {running && <span className="kai-dot pos pulse" />}
+                    <div>
+                        <h2 className="kai-card-title">{running ? 'Live debate log' : 'Debate log'}</h2>
+                        <div className="kai-card-sub">{events.length} entries, exactly as recorded by the coordinator</div>
+                    </div>
                 </div>
-                <Button
-                    variant="outline-secondary"
-                    size="sm"
-                    onClick={exportToPDF}
-                    className="d-flex align-items-center gap-2 rounded-pill px-3 bg-white border-0 shadow-sm"
-                >
-                    <Download size={14} />
-                    <span className="small fw-semibold">Export Transcript</span>
-                </Button>
-            </Card.Header>
-            <Card.Body className="p-0 overflow-auto custom-scrollbar" style={{ backgroundColor: 'rgba(255,255,255,0.3)' }}>
-                <ListGroup variant="flush" ref={feedRef} className="p-3">
-                    {debateLogs.map((log, index) => (
-                        <ListGroup.Item key={index} className="bg-transparent border-0 px-3 py-3 mb-2 rounded-3 hover-bg-light transition-all">
-                            <div className="d-flex align-items-start gap-3">
-                                <div className="mt-1 shadow-sm rounded-circle bg-white p-1">
-                                    {getAgentBadge(log.agent)}
-                                </div>
-                                <div className="flex-grow-1">
-                                    <div className="d-flex justify-content-between align-items-center mb-2">
-                                        <span className="small fw-bold text-secondary text-uppercase ls-1" style={{ fontSize: '0.7em' }}>
-                                            {log.agent}
-                                        </span>
-                                        <small className="text-muted opacity-75" style={{ fontSize: '0.75em' }}>
-                                            {new Date(log.timestamp).toLocaleTimeString()}
-                                        </small>
-                                    </div>
-                                    <div className="text-primary bg-primary bg-opacity-10 p-4 rounded-4 border border-primary-subtle shadow-sm">
-                                        {log.agent === 'system' ? (
-                                            <div className="small fst-italic opacity-75">
-                                                {renderMessageWithCitations(log.message)}
-                                            </div>
-                                        ) : (
-                                            <div className="markdown-content" style={{ fontSize: '1rem', color: 'var(--text-primary)' }}>
-                                                <ReactMarkdown components={markdownComponents}>
-                                                    {log.message}
-                                                </ReactMarkdown>
-                                            </div>
-                                        )}
-                                    </div>
+                <button type="button" onClick={handleExport} className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-2">
+                    <Download size={14} /> Export PDF
+                </button>
+            </div>
+            <div className="custom-scrollbar" style={{ maxHeight: 480, overflowY: 'auto' }}>
+                <ul className="list-unstyled mb-0 px-4 py-2" ref={feedRef}>
+                    {events.map((e, i) => (
+                        <li key={`${e.timestamp}-${i}`} className="d-flex gap-3 py-3" style={{ borderBottom: i < events.length - 1 ? '1px solid var(--border)' : 0 }}>
+                            <div className="flex-shrink-0 pt-1"><AgentBadge agent={e.agent} /></div>
+                            <div style={{ minWidth: 0 }}>
+                                <div className="small text-muted mb-1">{e.round ? `Round ${e.round} · ` : ''}{clock(e.timestamp)}</div>
+                                <div className={e.agent === 'system' ? 'small text-muted' : 'small'} style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', color: e.agent === 'system' ? undefined : 'var(--text)' }}>
+                                    {e.message}
                                 </div>
                             </div>
-                        </ListGroup.Item>
+                        </li>
                     ))}
-                    <div ref={bottomRef} />
-                </ListGroup>
-            </Card.Body>
-        </Card>
+                </ul>
+            </div>
+        </section>
     );
 };
 

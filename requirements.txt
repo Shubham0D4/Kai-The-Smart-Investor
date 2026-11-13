@@ -29,8 +29,9 @@ statsmodels==0.14.4
 
 # Observability
 arize-phoenix==4.0.0
-opentelemetry-api==1.27.0
-opentelemetry-sdk==1.27.0
+# opentelemetry-* is deliberately NOT pinned here: pinning 1.27.0 conflicts with
+# arize-phoenix + google-generativeai and makes pip backtrack forever. arize-phoenix
+# installs a compatible opentelemetry itself.
 
 # Cryptography (for AP2 signed packets)
 cryptography==43.0.0
@@ -46,10 +47,6 @@ pytest-asyncio==0.24.0
 # Utilities
 python-dateutil==2.9.0
 
-# Authentication
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-bcrypt==4.0.1
-python-multipart==0.0.9
+# Database
 sqlalchemy==2.0.28
 yfinance==1.0

@@ -1,79 +1,51 @@
 import React from 'react';
-import { Accordion, Table, Badge } from 'react-bootstrap';
-import { Activity, Clock, Coins, Server } from 'lucide-react';
-import { useCommittee } from '../../context/CommitteeContext';
+import { Accordion } from 'react-bootstrap';
+import { useCommittee } from '../../context/committee';
+import Chip from '../../components/Chip';
 
+/** Every LLM call the debate made, with the tokens it used (the budget is enforced on this). */
 const TraceDashboard = () => {
-    const { traceLogs } = useCommittee();
+    const { debate } = useCommittee();
+    if (!debate) return null;
+    const calls = debate.llm_calls || [];
+    const limit = debate.token_limit;
+    const used = limit ? Math.min(100, (debate.total_tokens / limit) * 100) : 0;
 
     return (
-        <div className="mt-5 mb-5">
-            <Accordion>
-                <Accordion.Item eventKey="0" className="border shadow-sm">
-                    <Accordion.Header>
-                        <div className="d-flex align-items-center gap-2 text-muted fw-bold">
-                            <Activity size={18} />
-                            Technical Trace (Observability)
-                            <Badge bg="light" text="dark" className="border ms-2">
-                                {traceLogs.length} Events
-                            </Badge>
+        <Accordion data-testid="trace-dashboard">
+            <Accordion.Item eventKey="0" style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
+                <Accordion.Header>
+                    <span className="fw-semibold">LLM calls and token budget</span>
+                    <span className="ms-3 small text-muted fw-normal">{calls.length} calls</span>
+                </Accordion.Header>
+                <Accordion.Body className="p-0">
+                    <div className="px-4 py-3">
+                        <div className="small mb-2">
+                            {debate.total_tokens.toLocaleString()} tokens used{limit ? ` of ${limit.toLocaleString()}` : ''}
                         </div>
-                    </Accordion.Header>
-                    <Accordion.Body className="p-0">
-                        <div className="table-responsive" style={{ maxHeight: '300px' }}>
-                            <Table striped hover borderless className="mb-0 align-middle">
-                                <thead className="bg-light sticky-top">
-                                    <tr>
-                                        <th className="small text-uppercase text-muted ps-4">Timestamp</th>
-                                        <th className="small text-uppercase text-muted">Agent</th>
-                                        <th className="small text-uppercase text-muted">Step / Tool</th>
-                                        <th className="small text-uppercase text-muted text-end">Latency</th>
-                                        <th className="small text-uppercase text-muted text-end">Tokens</th>
-                                        <th className="small text-uppercase text-muted text-center pe-4">Status</th>
+                        {limit ? <div className={`kai-meter${used > 80 ? ' warn' : ''}`}><span style={{ width: `${used}%` }} /></div> : null}
+                    </div>
+                    <div className="table-responsive custom-scrollbar" style={{ maxHeight: 300 }}>
+                        <table className="kai-table">
+                            <thead><tr><th className="ps-4">#</th><th>Agent</th><th>Round</th><th className="num">Tokens</th><th className="pe-4">Accepted</th></tr></thead>
+                            <tbody>
+                                {calls.length === 0 ? (
+                                    <tr><td colSpan={5} className="text-center py-4 text-muted">No LLM calls yet.</td></tr>
+                                ) : calls.map((c, i) => (
+                                    <tr key={`${c.agent}-${c.round}-${i}`}>
+                                        <td className="ps-4 muted">{i + 1}</td>
+                                        <td className="text-capitalize">{c.agent}</td>
+                                        <td>{c.round}</td>
+                                        <td className="num">{c.total_tokens.toLocaleString()}</td>
+                                        <td className="pe-4"><Chip tone={c.ok ? 'pos' : 'neg'}>{c.ok ? 'yes' : 'rejected'}</Chip></td>
                                     </tr>
-                                </thead>
-                                <tbody>
-                                    {traceLogs.length === 0 ? (
-                                        <tr>
-                                            <td colSpan="6" className="text-center py-4 text-muted small">
-                                                No trace data available. Start a debate to see telemetry.
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        traceLogs.map((trace) => (
-                                            <tr key={trace.id}>
-                                                <td className="ps-4 small font-monospace text-secondary">
-                                                    {new Date(trace.timestamp).toISOString().split('T')[1].slice(0, -1)}
-                                                </td>
-                                                <td>
-                                                    <Badge bg="light" text="dark" className="border">{trace.agent}</Badge>
-                                                </td>
-                                                <td className="small fw-semibold text-primary">
-                                                    {trace.step}
-                                                </td>
-                                                <td className="text-end small font-monospace">
-                                                    <span className={`${trace.latency > 500 ? 'text-warning' : 'text-success'}`}>
-                                                        {trace.latency}ms
-                                                    </span>
-                                                </td>
-                                                <td className="text-end small font-monospace text-muted">
-                                                    {trace.tokens}
-                                                </td>
-                                                <td className="text-center pe-4">
-                                                    <Badge bg={trace.status === 'SUCCESS' ? 'success' : 'danger'} style={{ fontSize: '0.6em' }}>
-                                                        {trace.status}
-                                                    </Badge>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </Table>
-                        </div>
-                    </Accordion.Body>
-                </Accordion.Item>
-            </Accordion>
-        </div>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </Accordion.Body>
+            </Accordion.Item>
+        </Accordion>
     );
 };
 

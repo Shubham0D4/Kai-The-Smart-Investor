@@ -1,1 +1,329 @@
-/* Default styles removed to prevent conflict with App.css */
+/* =========================================================================
+   Kai design system
+   Light theme is the default; dark is the alternative. Both are driven by
+   Bootstrap 5.3's data-bs-theme attribute (set in App.jsx), so Bootstrap's own
+   components (tables, tabs, modals, popovers, forms) follow the theme too.
+   One accent colour; green / red / amber appear only where they mean something.
+   ========================================================================= */
+
+:root {
+  --font-sans: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* type scale */
+  --fs-xs: 0.75rem;     /* 12px  labels, captions */
+  --fs-sm: 0.8125rem;   /* 13px  secondary text, tables */
+  --fs-base: 0.9375rem; /* 15px  body */
+  --fs-lg: 1.125rem;    /* 18px  card titles */
+  --fs-xl: 1.5rem;      /* 24px  page titles */
+  --fs-display: 2.25rem; /* 36px verdict */
+}
+
+[data-bs-theme='light'] {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f9fafb;
+  --surface-3: #f1f3f6;
+  --text: #0f172a;
+  --text-2: #475569;
+  --text-3: #64748b;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  --accent: #1d4ed8;
+  --accent-hover: #1e40af;
+  --accent-soft: #eff4ff;
+
+  --pos: #047857;   --pos-bg: #ecfdf5;   --pos-border: #a7f3d0;
+  --neg: #b91c1c;   --neg-bg: #fef2f2;   --neg-border: #fecaca;
+  --warn: #92400e;  --warn-bg: #fffbeb;  --warn-border: #fde68a;
+  --info: #075985;  --info-bg: #f0f9ff;  --info-border: #bae6fd;
+  --neutral: #475569; --neutral-bg: #f1f5f9; --neutral-border: #e2e8f0;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.07);
+}
+
+[data-bs-theme='dark'] {
+  --bg: #0b1220;
+  --surface: #111a2e;
+  --surface-2: #0e1729;
+  --surface-3: #16213a;
+  --text: #e8edf5;
+  --text-2: #b6c1d3;
+  --text-3: #8b99b0;
+  --border: #243049;
+  --border-strong: #33425f;
+
+  --accent: #6b9bff;
+  --accent-hover: #8fb3ff;
+  --accent-soft: #14233f;
+
+  --pos: #4ade80;   --pos-bg: #0f2a1f;   --pos-border: #1d5a3a;
+  --neg: #f87171;   --neg-bg: #2d1518;   --neg-border: #6b2327;
+  --warn: #fbbf24;  --warn-bg: #2b2210;  --warn-border: #6b5416;
+  --info: #7dd3fc;  --info-bg: #0f2433;  --info-border: #1f5575;
+  --neutral: #b6c1d3; --neutral-bg: #16213a; --neutral-border: #243049;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+/* ---- map the tokens onto Bootstrap ---------------------------------------------------- */
+[data-bs-theme] {
+  --bs-body-font-family: var(--font-sans);
+  --bs-body-font-size: var(--fs-base);
+  --bs-body-line-height: 1.55;
+  --bs-body-bg: var(--bg);
+  --bs-body-color: var(--text);
+  --bs-emphasis-color: var(--text);
+  --bs-secondary-color: var(--text-2);
+  --bs-tertiary-color: var(--text-3);
+  --bs-secondary-bg: var(--surface-3);
+  --bs-tertiary-bg: var(--surface-2);
+  --bs-border-color: var(--border);
+  --bs-border-radius: var(--radius-md);
+  --bs-link-color: var(--accent);
+  --bs-link-hover-color: var(--accent-hover);
+  --bs-primary: var(--accent);
+  --bs-success: var(--pos);
+  --bs-danger: var(--neg);
+  --bs-warning: var(--warn);
+  --bs-info: var(--info);
+  --bs-card-bg: var(--surface);
+  --bs-card-border-color: var(--border);
+  --bs-card-cap-bg: transparent;
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--text);
+  --bs-table-border-color: var(--border);
+  --bs-heading-color: var(--text);
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  /* No global font-feature-settings: tabular figures also widen hyphens. They are applied to
+     numeric columns only (.num, .kai-table, .kai-strip). */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5, h6 { color: var(--text); font-weight: 650; letter-spacing: -0.012em; }
+h1 { font-size: var(--fs-xl); line-height: 1.25; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: var(--fs-lg); }
+h5 { font-size: var(--fs-lg); }
+h6 { font-size: var(--fs-base); }
+p { color: var(--text-2); }
+a { text-decoration: none; }
+a:hover { text-decoration: underline; }
+.text-muted, .text-secondary { color: var(--text-3) !important; }
+.small, small { font-size: var(--fs-sm); }
+code, .font-monospace { font-family: var(--font-mono) !important; font-size: 0.92em; font-feature-settings: normal; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* ---- layout ------------------------------------------------------------------------- */
+.kai-container { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
+@media (max-width: 575.98px) { .kai-container { padding: 0 14px; } }
+
+.kai-header {
+  position: sticky; top: 0; z-index: 1030;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: saturate(160%) blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+.kai-header-inner { height: 60px; display: flex; align-items: center; justify-content: space-between; }
+.kai-brand { display: flex; align-items: center; gap: 12px; color: var(--text); text-decoration: none !important; }
+.kai-brand-mark {
+  width: 32px; height: 32px; border-radius: 8px; background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+}
+.kai-brand-name { font-weight: 700; font-size: 1.0625rem; letter-spacing: -0.02em; line-height: 1.1; }
+.kai-brand-tag { font-size: var(--fs-xs); color: var(--text-3); line-height: 1.1; }
+.kai-main { padding: 28px 0 56px; }
+.kai-stack { display: flex; flex-direction: column; gap: 20px; }
+.kai-footer { border-top: 1px solid var(--border); padding: 20px 0; color: var(--text-3); font-size: var(--fs-xs); text-align: center; }
+
+/* ---- surfaces ----------------------------------------------------------------------- */
+.kai-card, .glass-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.kai-card-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+}
+.kai-card-body { padding: 20px; }
+.kai-card-title { margin: 0; font-size: var(--fs-lg); font-weight: 650; }
+.kai-card-sub { margin: 2px 0 0; font-size: var(--fs-sm); color: var(--text-3); }
+
+.kai-label {
+  font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 8px;
+}
+.kai-divider { border: 0; border-top: 1px solid var(--border); margin: 0; }
+
+/* ---- status chips: restrained, tinted, never solid blocks of colour --------------------- */
+.kai-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 999px;
+  font-size: var(--fs-xs); font-weight: 600; line-height: 1.5; white-space: nowrap;
+  border: 1px solid var(--neutral-border); background: var(--neutral-bg); color: var(--neutral);
+}
+.kai-chip.pos { background: var(--pos-bg); border-color: var(--pos-border); color: var(--pos); }
+.kai-chip.neg { background: var(--neg-bg); border-color: var(--neg-border); color: var(--neg); }
+.kai-chip.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn); }
+.kai-chip.info { background: var(--info-bg); border-color: var(--info-border); color: var(--info); }
+.kai-chip.accent { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+.kai-chip.plain { background: transparent; }
+.kai-chip.mono { font-family: var(--font-mono); font-weight: 500; font-feature-settings: normal; }
+
+.kai-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); display: inline-block; flex-shrink: 0; }
+.kai-dot.pos { background: var(--pos); } .kai-dot.neg { background: var(--neg); }
+.kai-dot.warn { background: #d97706; } .kai-dot.accent { background: var(--accent); }
+.kai-dot.pulse { animation: kai-pulse 1.4s ease-in-out infinite; }
+@keyframes kai-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+.pos-text { color: var(--pos) !important; } .neg-text { color: var(--neg) !important; }
+.warn-text { color: var(--warn) !important; }
+
+/* ---- buttons, forms --------------------------------------------------------------------- */
+.btn { border-radius: var(--radius-md); font-weight: 600; font-size: var(--fs-base); padding: 0.5rem 1rem; }
+.btn-sm { font-size: var(--fs-sm); padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); }
+.btn-primary {
+  --bs-btn-bg: var(--accent); --bs-btn-border-color: var(--accent); --bs-btn-color: #fff;
+  --bs-btn-hover-bg: var(--accent-hover); --bs-btn-hover-border-color: var(--accent-hover); --bs-btn-hover-color: #fff;
+  --bs-btn-active-bg: var(--accent-hover); --bs-btn-active-border-color: var(--accent-hover);
+  --bs-btn-disabled-bg: var(--accent); --bs-btn-disabled-border-color: var(--accent); --bs-btn-disabled-opacity: 0.55;
+}
+[data-bs-theme='dark'] .btn-primary { --bs-btn-color: #0b1220; --bs-btn-hover-color: #0b1220; }
+.btn-outline-secondary { --bs-btn-color: var(--text-2); --bs-btn-border-color: var(--border-strong);
+  --bs-btn-hover-bg: var(--surface-3); --bs-btn-hover-color: var(--text); --bs-btn-hover-border-color: var(--border-strong); }
+.btn-ghost { background: transparent; border: 1px solid transparent; color: var(--text-2); }
+.btn-ghost:hover { background: var(--surface-3); color: var(--text); }
+
+.form-control {
+  background: var(--surface); color: var(--text); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md); font-size: var(--fs-base);
+}
+.form-control::placeholder { color: var(--text-3); }
+.form-control:focus { background: var(--surface); color: var(--text); border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+
+.kai-segment { display: inline-flex; padding: 3px; gap: 2px; background: var(--surface-3); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.kai-segment button {
+  border: 0; background: transparent; color: var(--text-2); font-weight: 600; font-size: var(--fs-sm);
+  padding: 6px 14px; border-radius: 7px; display: inline-flex; align-items: center; gap: 6px;
+}
+.kai-segment button[aria-pressed='true'] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+.kai-segment button:hover:not([aria-pressed='true']) { color: var(--text); }
+
+.kai-iconbtn {
+  width: 36px; height: 36px; border-radius: var(--radius-md); border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-2); display: inline-flex; align-items: center; justify-content: center;
+}
+.kai-iconbtn:hover { background: var(--surface-3); color: var(--text); }
+
+/* ---- tables ----------------------------------------------------------------------------- */
+.kai-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.kai-table th { font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3);
+  padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+.kai-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; color: var(--text); }
+.kai-table tr:last-child td { border-bottom: 0; }
+.kai-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kai-table .muted { color: var(--text-3); }
+.kai-table tbody tr:hover { background: var(--surface-2); }
+
+/* ---- alerts ----------------------------------------------------------------------------- */
+.kai-alert { border: 1px solid; border-radius: var(--radius-md); padding: 12px 16px; font-size: var(--fs-sm); }
+.kai-alert strong { font-weight: 650; }
+.kai-alert.info { background: var(--info-bg); border-color: var(--info-border); color: var(--info); }
+.kai-alert.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn); }
+.kai-alert.neg { background: var(--neg-bg); border-color: var(--neg-border); color: var(--neg); }
+.kai-alert.pos { background: var(--pos-bg); border-color: var(--pos-border); color: var(--pos); }
+.kai-alert.neutral { background: var(--neutral-bg); border-color: var(--neutral-border); color: var(--text-2); }
+.kai-alert ul { color: inherit; }
+
+/* ---- meters ----------------------------------------------------------------------------- */
+.kai-meter { height: 6px; background: var(--surface-3); border-radius: 999px; overflow: hidden; }
+.kai-meter > span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.kai-meter.pos > span { background: var(--pos); }
+.kai-meter.warn > span { background: #d97706; }
+
+/* ---- bootstrap components, themed ---------------------------------------------------------- */
+.nav-tabs { --bs-nav-tabs-border-color: var(--border); --bs-nav-tabs-link-active-bg: transparent;
+  --bs-nav-tabs-link-active-border-color: var(--border) var(--border) var(--surface); gap: 4px; }
+.nav-tabs .nav-link { color: var(--text-3); font-weight: 600; font-size: var(--fs-sm); border-radius: var(--radius-sm) var(--radius-sm) 0 0; padding: 8px 16px; }
+.nav-tabs .nav-link:hover { color: var(--text); border-color: transparent; }
+.nav-tabs .nav-link.active { color: var(--accent); background: var(--surface); border-color: var(--border) var(--border) var(--surface); }
+
+.accordion { --bs-accordion-bg: var(--surface); --bs-accordion-border-color: var(--border); --bs-accordion-btn-bg: var(--surface);
+  --bs-accordion-active-bg: var(--surface-2); --bs-accordion-active-color: var(--text); --bs-accordion-btn-color: var(--text);
+  --bs-accordion-btn-focus-box-shadow: none; --bs-accordion-border-radius: var(--radius-lg); }
+
+.modal-content { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); }
+.modal-header, .modal-footer { border-color: var(--border); }
+.popover { --bs-popover-bg: var(--surface); --bs-popover-border-color: var(--border); --bs-popover-header-bg: var(--surface-2);
+  --bs-popover-header-color: var(--text); --bs-popover-body-color: var(--text); box-shadow: var(--shadow-md); }
+.tooltip { --bs-tooltip-bg: var(--text); --bs-tooltip-color: var(--surface); --bs-tooltip-opacity: 1; font-size: var(--fs-xs); }
+
+/* market strip */
+.kai-strip { font-variant-numeric: tabular-nums; display: grid; grid-template-columns: repeat(4, 1fr); }
+.kai-strip-item { padding: 14px 20px; border-right: 1px solid var(--border); }
+.kai-strip-item:last-child { border-right: 0; }
+@media (max-width: 767.98px) {
+  .kai-strip { grid-template-columns: repeat(2, 1fr); }
+  .kai-strip-item:nth-child(2) { border-right: 0; }
+  .kai-strip-item:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+}
+
+/* ---- small components ------------------------------------------------------------------------ */
+.kai-tile { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px; }
+.kai-tile .value { font-size: var(--fs-lg); font-weight: 650; font-variant-numeric: tabular-nums; }
+.kai-listbtn {
+  display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px;
+  background: transparent; border: 0; text-align: left; color: var(--text); padding: 9px 10px; border-radius: var(--radius-md);
+}
+.kai-listbtn:hover { background: var(--surface-3); }
+
+.kai-verdict-pill {
+  display: inline-flex; align-items: center; gap: 10px; padding: 8px 18px; border-radius: var(--radius-md);
+  font-size: var(--fs-display); font-weight: 750; letter-spacing: -0.02em; line-height: 1.1; border: 1px solid;
+}
+.kai-verdict-pill.pos { background: var(--pos-bg); border-color: var(--pos-border); color: var(--pos); }
+.kai-verdict-pill.neg { background: var(--neg-bg); border-color: var(--neg-border); color: var(--neg); }
+.kai-verdict-pill.neutral { background: var(--neutral-bg); border-color: var(--neutral-border); color: var(--text); }
+.kai-verdict-pill.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn); }
+
+.kai-evidence { font-family: var(--font-mono); font-size: 0.72rem; font-feature-settings: normal; cursor: pointer;
+  padding: 1px 7px; border-radius: 6px; border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text-2); }
+.kai-evidence:hover { border-color: var(--accent); color: var(--accent); }
+.kai-evidence.missing { border-color: var(--neg-border); background: var(--neg-bg); color: var(--neg); }
+
+.kai-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+@media (max-width: 767.98px) { .kai-steps { grid-template-columns: 1fr; } }
+.kai-step-num { width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft); color: var(--accent);
+  font-weight: 700; font-size: var(--fs-sm); display: inline-flex; align-items: center; justify-content: center; }
+
+/* ---- scrollbars, motion ------------------------------------------------------------------------ */
+.custom-scrollbar { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+@keyframes kai-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.kai-fade { animation: kai-fade 0.25s ease-out; }
+@media (prefers-reduced-motion: reduce) { .kai-fade, .kai-dot.pulse, .spin-animation { animation: none !important; } }
+
+/* price flash (TickerPage) */
+@keyframes flashGreen { 0% { color: inherit; } 12% { color: var(--pos); } 100% { color: inherit; } }
+@keyframes flashRed { 0% { color: inherit; } 12% { color: var(--neg); } 100% { color: inherit; } }
+.glow-green-flash { animation: flashGreen 1.2s ease-out; }
+.glow-red-flash { animation: flashRed 1.2s ease-out; }

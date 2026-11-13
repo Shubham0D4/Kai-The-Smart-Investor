@@ -1,691 +1,427 @@
 """
-Gateway API - FastAPI Application
-Central API for iOS/Web clients with HITL workflow.
+Gateway API - FastAPI application for the single-user local Kai app.
+
+- No authentication (FIXES.md B2-B4 dropped). By default it listens on 127.0.0.1 and accepts
+  browser requests only from the Vite dev origin; both are set by environment variables
+  (gateway/config.py). Add auth before any public deployment.
+- Debates run in a thread pool (B5), never on the event loop, so /status answers while one runs.
+- Sessions, history and chat are stored in SQLite (B6). The coordinator object is never kept:
+  live logs and structure come from the persisted debate log (gateway/views.py).
+- Market data failures are errors, not made-up numbers (B9).
+
+All state lives on the app instance (`create_app`), so tests can build an app against a temporary
+database and "restart" the server by building a second one on the same file.
 """
 
+import logging
 import os
 import sys
+import traceback
 import uuid
-from datetime import datetime, timedelta
-from typing import Dict, Optional, List
-from fastapi import FastAPI, HTTPException, BackgroundTasks, status, Depends
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordRequestForm
-from dotenv import load_dotenv
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional
+
 import yfinance as yf
-import logging
-import json
+from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import sessionmaker
 
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from gateway.schema import (
-    AnalysisRequest, AnalysisResponse, StatusResponse,
-    ApprovalRequest, ApprovalResponse, HistoryResponse, HistoryItem,
-    ErrorResponse, AnalysisStatus, HITLMode, PersonaType,
-    Token, UserCreate, UserResponse, ChatRequest, ChatResponse
-)
-from gateway.hitl_manager import HITLManager
-from gateway import models, auth
-from gateway.database import engine, get_db
-from sqlalchemy.orm import Session
+from coordinator.llm_client import DEFAULT_GROQ_MODEL
 from coordinator.personas import RiskPersona
 from coordinator.server import DebateCoordinator
-from judge.sigma_agent import SigmaAgent
+from gateway import models
+from gateway.config import LOCAL_USER, GatewaySettings, load_settings
+from gateway.database import Base, make_engine, make_session_factory
+from gateway.hitl_manager import HITLManager
+from gateway.schema import (
+    AlphaPacket, AnalysisRequest, AnalysisResponse, AnalysisStatus, ApprovalRequest, ApprovalResponse,
+    ChatRequest, ChatResponse, HistoryItem, HistoryResponse, HITLMode, IndexQuote, LogEvent,
+    NewsArticle, NewsResponse, PricePoint, StatusResponse, TickerQuote,
+)
+from gateway.store import SessionStore
+from gateway.views import build_events, read_log, status_response
 from judge.ap2_handler import AP2Handler
-from groq import Groq
+from judge.sigma_agent import SigmaAgent
+from mcp_server.tools.news_stream import get_news_stream
 
-# Initialize Logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Groq client
-if os.getenv("GROQ_API_KEY"):
-    groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-else:
-    groq_client = None 
-
-load_dotenv()
-
-# Create tables
-models.Base.metadata.create_all(bind=engine)
-
-# Initialize FastAPI app
-app = FastAPI(
-    title="Kai - Economist Gateway API",
-    description="Central API for explainable investing copilot",
-    version="1.0.0"
-)
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, specify allowed origins
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Initialize managers
-hitl_manager = HITLManager()
-ap2_handler = AP2Handler()
-sigma_agent = SigmaAgent()
-
-# Session storage (in production, use Redis or database)
-sessions: Dict[str, Dict] = {}
-user_history: Dict[str, list] = {}
+INDICES = {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "DOW": "^DJI", "VIX": "^VIX"}
+HISTORY_PERIODS = {"1d": "1m", "5d": "15m", "1mo": "60m", "ytd": "1d", "1y": "1d"}
+MARKET_NEWS_SYMBOL = "SPY"      # broad-market news: coverage of the S&P 500 ETF
+CHAT_MODEL = os.getenv("KAI_GROQ_MODEL") or DEFAULT_GROQ_MODEL
+CHAT_SYSTEM_PROMPT = ("You are Kai, an advanced AI investment assistant. Be concise, professional, and "
+                      "data-driven. You have no access to live data in this chat; say so if asked for prices.")
 
 
-@app.get("/")
-async def root():
-    """Root endpoint."""
-    return {
-        "service": "Kai - Economist Gateway API",
-        "version": "1.0.0",
-        "status": "operational"
-    }
+# --------------------------------------------------------------------------- app context
+
+@dataclass
+class AppContext:
+    settings: GatewaySettings
+    session_factory: sessionmaker
+    store: SessionStore
+    hitl: HITLManager
+    ap2: AP2Handler
+    sigma: SigmaAgent
+    executor: ThreadPoolExecutor
+    coordinator_factory: Callable[[str, RiskPersona], DebateCoordinator]
+    groq: Optional[Any] = None
 
 
-@app.post("/auth/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.username == form_data.username).first()
-    if not user or not auth.verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = auth.create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+def get_ctx(request: Request) -> AppContext:
+    return request.app.state.ctx
 
 
-@app.post("/auth/register", response_model=UserResponse)
-async def register_user(user: UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(models.User).filter(models.User.username == user.username).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="Username already registered")
-    
-    hashed_password = auth.get_password_hash(user.password)
-    db_user = models.User(
-        username=user.username,
-        email=user.email,
-        hashed_password=hashed_password,
-        role=user.role
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+def _now() -> str:
+    return datetime.now().isoformat()
 
 
-@app.get("/auth/me", response_model=UserResponse)
-async def read_users_me(current_user: models.User = Depends(auth.get_current_active_user)):
-    return current_user
+# --------------------------------------------------------------------------- the analysis workflow
 
-
-@app.get("/api/v1/market/indices", tags=["Market Data"])
-def get_market_indices(current_user: models.User = Depends(auth.get_current_active_user)):
-    """Fetch live data for major indices."""
-    indices = {
-        "S&P 500": "^GSPC",
-        "NASDAQ": "^IXIC",
-        "DOW": "^DJI",
-        "VIX": "^VIX"
-    }
-    
-    results = []
+def run_analysis(ctx: AppContext, session_id: str, ticker: str, persona: str) -> None:
+    """
+    Whole analysis for one session. Runs in a worker thread (never on the event loop).
+    Progress is visible to /status through the debate log file the coordinator writes; this
+    function only records the outcome. Any exception becomes a `failed` session with its message.
+    """
+    store = ctx.store
     try:
-        tickers = yf.Tickers(" ".join(indices.values()))
-        for name, symbol in indices.items():
-            ticker = tickers.tickers[symbol]
-            # Fast info access
-            info = ticker.fast_info
-            price = info.last_price
-            prev_close = info.previous_close
-            change = price - prev_close
-            change_percent = (change / prev_close) * 100
-            
-            results.append({
-                "name": name,
-                "value": f"{price:,.2f}",
-                "change": f"{change_percent:+.2f}%",
-                "positive": change >= 0
-            })
+        coordinator = ctx.coordinator_factory(ticker, RiskPersona(persona))
+        coordinator.logger.log_system_message(
+            f"Investment mandate created for {ticker}. Analysis session {session_id} started.")
+        coordinator.logger.flush()
+        # Absolute, so the session still finds its log if the server restarts from another directory
+        store.update(session_id, debate_log=os.path.abspath(coordinator.logger.log_path))
+
+        mandate = ctx.ap2.create_intent_mandate(user_id=LOCAL_USER, ticker=ticker, persona=persona)
+        store.update(session_id, mandate=mandate)
+
+        debate = coordinator.run_debate(rounds=3)
+
+        # Sigma gets the quant report directly as a structured input, separate from the transcript
+        evaluation = ctx.sigma.evaluate_debate(debate["log_file"], persona=persona,
+                                               quant_report=coordinator.quant_report)
+        packet = ctx.ap2.generate_alpha_packet(mandate=mandate, sigma_evaluation=evaluation,
+                                               debate_log_path=debate["log_file"])
+        packet_path = ctx.ap2.save_alpha_packet(packet)
+
+        final = evaluation["final_recommendation"]
+        recommendation, confidence = final["recommendation"], final["confidence"]
+        mode, reason = ctx.hitl.evaluate_hitl_requirement(recommendation, confidence)
+        fields: Dict[str, Any] = dict(
+            debate_log=os.path.abspath(debate["log_file"]), evaluation=evaluation, alpha_packet=packet,
+            alpha_packet_path=packet_path, recommendation=recommendation, confidence=confidence,
+            hitl_mode=mode.value, hitl_reason=reason,
+        )
+        if mode == HITLMode.PASSIVE:
+            fields["notification"] = ctx.hitl.create_notification(
+                recommendation, confidence, ticker, reason=final.get("reason")).model_dump(mode="json")
+            fields["status"] = AnalysisStatus.COMPLETED.value
+        else:
+            challenge = ctx.hitl.create_step_up_challenge(
+                recommendation, confidence, ticker, key_points=final.get("supporting_points") or None)
+            fields["challenge"] = challenge.model_dump(mode="json")
+            fields["status"] = AnalysisStatus.WAITING_APPROVAL.value
+        store.update(session_id, **fields)
     except Exception as e:
-        logger.error(f"Error fetching indices: {e}")
-        # Return fallback/mock if API fails to avoid breaking UI
-        return [
-            {"name": "S&P 500", "value": "4,783.45", "change": "+0.45%", "positive": True},
-            {"name": "NASDAQ", "value": "15,055.65", "change": "+0.75%", "positive": True},
-            {"name": "DOW", "value": "37,695.73", "change": "-0.12%", "positive": False},
-        ]
-        
+        logger.error("Analysis %s failed: %s\n%s", session_id, e, traceback.format_exc())
+        store.update(session_id, status=AnalysisStatus.FAILED.value, error=f"{type(e).__name__}: {e}")
+
+
+# --------------------------------------------------------------------------- routes
+
+router = APIRouter()
+
+
+@router.get("/")
+def root():
+    return {"service": "Kai - Economist Gateway API", "version": "2.0.0", "status": "operational"}
+
+
+@router.get("/health")
+def health_check():
+    return {"status": "healthy", "timestamp": _now()}
+
+
+# ---- market data (yfinance). A failure is reported as an error, never replaced by made-up numbers.
+
+def _provider_error(what: str, e: Exception) -> HTTPException:
+    logger.error("%s failed: %s", what, e)
+    return HTTPException(status_code=502, detail=f"Market data provider (yfinance) failed for {what}: {e}")
+
+
+def _number(v: Any) -> Optional[float]:
+    return float(v) if isinstance(v, (int, float)) and v == v else None
+
+
+@router.get("/api/v1/market/indices", response_model=List[IndexQuote], tags=["Market Data"])
+def get_market_indices():
+    """Live data for major indices. Each index reports its own availability; if none can be
+    fetched the request fails with 502."""
+    results, errors = [], []
+    for name, symbol in INDICES.items():
+        try:
+            fi = yf.Ticker(symbol).fast_info
+            price, prev = _number(fi.last_price), _number(fi.previous_close)
+            if price is None or not prev:
+                raise ValueError("no price returned")
+            change = (price - prev) / prev * 100
+            results.append(IndexQuote(name=name, symbol=symbol, available=True, value=f"{price:,.2f}",
+                                      change=f"{change:+.2f}%", positive=price >= prev))
+        except Exception as e:
+            errors.append(f"{name}: {e}")
+            results.append(IndexQuote(name=name, symbol=symbol, available=False, error=str(e)))
+    if not any(r.available for r in results):
+        raise _provider_error("market indices", Exception("; ".join(errors)))
     return results
 
-@app.get("/api/v1/ticker/{symbol}/quote", tags=["Market Data"])
-def get_ticker_quote(symbol: str, current_user: models.User = Depends(auth.get_current_active_user)):
-    """Fetch real-time quote and stats for a ticker."""
+
+@router.get("/api/v1/ticker/{symbol}/quote", response_model=TickerQuote, tags=["Market Data"])
+def get_ticker_quote(symbol: str):
+    """Quote and key statistics for a ticker."""
     try:
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
-        fast_info = ticker.fast_info
-        
-        current_price = fast_info.last_price
-        prev_close = fast_info.previous_close
-        change = current_price - prev_close
-        change_pct = (change / prev_close) * 100
-        
-        return {
-            "symbol": symbol.upper(),
-            "name": info.get('shortName', symbol),
-            "price": f"{current_price:,.2f}",
-            "change": f"{change_pct:+.2f}%",
-            "is_positive": change >= 0,
-            "market_cap": info.get('marketCap', 'N/A'),
-            "pe_ratio": info.get('trailingPE', 'N/A'),
-            "dividend_yield": f"{info.get('dividendYield', 0) * 100:.2f}%" if info.get('dividendYield') else "N/A",
-            "high_52w": f"${info.get('fiftyTwoWeekHigh', 0):,.2f}",
-            "low_52w": f"${info.get('fiftyTwoWeekLow', 0):,.2f}"
-        }
+        tk = yf.Ticker(symbol)
+        fi = tk.fast_info
+        price, prev = _number(fi.last_price), _number(fi.previous_close)
     except Exception as e:
-        logger.error(f"Error fetching quote for {symbol}: {e}")
-        raise HTTPException(status_code=404, detail="Ticker not found")
-
-@app.get("/api/v1/ticker/{symbol}/history", tags=["Market Data"])
-def get_ticker_history(symbol: str, period: str = "1d", current_user: models.User = Depends(auth.get_current_active_user)):
-    """Fetch historical data for charts. Periods: 1d, 5d, 1mo, ytd, 1y"""
-    valid_periods = {"1d": "1m", "5d": "15m", "1mo": "60m", "ytd": "1d", "1y": "1d"}
-    interval = valid_periods.get(period, "1d")
-    
+        raise _provider_error(f"quote {symbol.upper()}", e)
+    if price is None or not prev:
+        raise HTTPException(status_code=404, detail=f"No quote available for {symbol.upper()}")
     try:
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period=period, interval=interval)
-        
-        data = []
-        for index, row in hist.iterrows():
-            # Format time based on period
-            if period in ["1d", "5d"]:
-                time_label = index.strftime("%H:%M") if period == "1d" else index.strftime("%m-%d %H:%M")
-            else:
-                time_label = index.strftime("%Y-%m-%d")
-                
-            data.append({
-                "name": time_label,
-                "price": round(row['Close'], 2)
-            })
-            
-        return data
-    except Exception as e:
-        logger.error(f"Error fetching history for {symbol}: {e}")
-        return []
-
-
-
-@app.post("/api/v1/analyze", response_model=AnalysisResponse)
-async def analyze_ticker(
-    request: AnalysisRequest,
-    background_tasks: BackgroundTasks,
-    current_user: models.User = Depends(auth.get_current_analyst_user)
-):
-    """
-    Start new investment analysis.
-    
-    This endpoint:
-    1. Creates intent mandate
-    2. Runs 3-round debate
-    3. Evaluates with Sigma
-    4. Generates Alpha Packet
-    5. Checks HITL requirement
-    6. Returns response or waits for approval
-    """
-    try:
-        # Create session
-        session_id = f"sess_{uuid.uuid4().hex[:16]}"
-        
-        # Initialize session
-        sessions[session_id] = {
-            "session_id": session_id,
-            "ticker": request.ticker.upper(),
-            "persona": request.persona,
-            "user_id": request.user_id,
-            "status": AnalysisStatus.RUNNING,
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat()
-        }
-        
-        # Run analysis in background
-        background_tasks.add_task(
-            run_analysis,
-            session_id,
-            request
-        )
-        
-        # Return initial response
-        return AnalysisResponse(
-            session_id=session_id,
-            status=AnalysisStatus.RUNNING,
-            hitl_mode=HITLMode.PASSIVE,  # Will be updated after analysis
-            ticker=request.ticker.upper(),
-            persona=request.persona,
-            created_at=sessions[session_id]["created_at"],
-            updated_at=sessions[session_id]["updated_at"]
-        )
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-async def run_analysis(session_id: str, request: AnalysisRequest):
-    """
-    Run complete analysis workflow (background task).
-    """
-    try:
-        session = sessions[session_id]
-        
-        # Persona selects the judge's decision thresholds only (agents never see it)
-        coord_persona = RiskPersona(request.persona.value)
-            
-        # Initialize coordinator in background
-        coordinator = DebateCoordinator(request.ticker, coord_persona)
-        session["coordinator"] = coordinator
-        
-        # Log initialization
-        coordinator.logger.log_system_message(f"Investment Mandate created for {request.ticker}. Analysis session {session_id} initialized.")
-        
-        # 1. Create intent mandate
-        mandate = ap2_handler.create_intent_mandate(
-            user_id=request.user_id,
-            ticker=request.ticker,
-            persona=request.persona.value
-        )
-        session["mandate"] = mandate
-        
-        # 2. Run debate (coordinator already initialized)
-        debate_result = coordinator.run_debate(rounds=3)
-        
-        session["debate_log"] = debate_result["log_file"]
-        
-        # 3. Evaluate with Sigma
-        # Sigma gets the quant report directly as a structured input, separate from the transcript
-        evaluation = sigma_agent.evaluate_debate(debate_result["log_file"], persona=request.persona.value,
-                                                 quant_report=coordinator.quant_report)
-        session["evaluation"] = evaluation
-        
-        # 4. Generate Alpha Packet
-        alpha_packet = ap2_handler.generate_alpha_packet(
-            mandate=mandate,
-            sigma_evaluation=evaluation,
-            debate_log_path=debate_result["log_file"]
-        )
-        
-        # Save Alpha Packet
-        packet_path = ap2_handler.save_alpha_packet(alpha_packet)
-        session["alpha_packet"] = alpha_packet
-        session["alpha_packet_path"] = packet_path
-        
-        # 5. Check HITL requirement
-        final = evaluation["final_recommendation"]
-        recommendation = final["recommendation"]
-        confidence = final["confidence"]
-        
-        hitl_mode, reason = hitl_manager.evaluate_hitl_requirement(
-            recommendation, confidence
-        )
-        
-        session["hitl_mode"] = hitl_mode
-        session["hitl_reason"] = reason
-        
-        # 6. Handle HITL mode
-        if hitl_mode == HITLMode.PASSIVE:
-            # Passive mode: Just notify
-            notification = hitl_manager.create_notification(
-                recommendation, confidence, request.ticker, reason=final.get("reason")
-            )
-            session["notification"] = notification.model_dump()
-            session["status"] = AnalysisStatus.COMPLETED
-            
-        else:
-            # Active mode: Require approval
-            challenge = hitl_manager.create_step_up_challenge(
-                recommendation, confidence, request.ticker, key_points=final.get("supporting_points") or None
-            )
-            session["step_up_challenge"] = challenge.model_dump()
-            session["challenge_id"] = challenge.challenge_id
-            session["status"] = AnalysisStatus.WAITING_APPROVAL
-        
-        session["updated_at"] = datetime.now().isoformat()
-        
-        # Add to user history
-        if request.user_id not in user_history:
-            user_history[request.user_id] = []
-        
-        user_history[request.user_id].append({
-            "session_id": session_id,
-            "ticker": request.ticker,
-            "persona": request.persona,
-            "recommendation": recommendation,
-            "confidence": confidence,
-            "created_at": session["created_at"],
-            "alpha_packet_id": alpha_packet["packet_id"]
-        })
-        
-    except Exception as e:
-        session["status"] = AnalysisStatus.FAILED
-        session["error"] = str(e)
-        session["updated_at"] = datetime.now().isoformat()
-
-
-@app.get("/api/v1/sessions/{session_id}/logs")
-async def get_session_logs(session_id: str, current_user: models.User = Depends(auth.get_current_active_user)):
-    """Get live debate logs for a session."""
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    session = sessions[session_id]
-    
-    # Priority 1: Get from in-memory coordinator for real-time
-    coord = session.get("coordinator")
-    if coord:
-        return coord.logger.get_logs()
-    
-    # Priority 2: Get from saved log file (and flatten it)
-    log_file = session.get("debate_log")
-    if log_file and os.path.exists(log_file):
-        try:
-            with open(log_file, 'r') as f:
-                debate_data = json.load(f)
-                
-                # Flatten structured log for frontend
-                flat_logs = []
-                for r in debate_data.get("rounds", []):
-                    for sys_log in r.get("system_logs", []):
-                        flat_logs.append(sys_log)
-                    for agent_name, resp in r.get("agents", {}).items():
-                        if "error" in resp:
-                            flat_logs.append({
-                                "timestamp": resp["timestamp"],
-                                "agent": "system",
-                                "message": f"ERROR ({agent_name.capitalize()}): {resp['error']}"
-                            })
-                        else:
-                            flat_logs.append({
-                                "timestamp": resp["timestamp"],
-                                "agent": agent_name,
-                                "message": resp["analysis"]
-                            })
-                return sorted(flat_logs, key=lambda x: x["timestamp"])
-        except Exception as e:
-            print(f"Error reading/flattening logs: {e}")
-            
-    return []
-
-
-@app.get("/api/v1/status/{session_id}", response_model=StatusResponse)
-async def get_status(session_id: str):
-    """
-    Check analysis status.
-    """
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    session = sessions[session_id]
-    
-    response = StatusResponse(
-        session_id=session_id,
-        status=session["status"],
-        hitl_mode=session.get("hitl_mode", HITLMode.PASSIVE),
-        ticker=session["ticker"],
-        progress=session.get("progress")
+        info = tk.info or {}
+    except Exception as e:             # statistics are optional; the price above is what matters
+        logger.warning("info for %s unavailable: %s", symbol, e)
+        info = {}
+    change = (price - prev) / prev * 100
+    dy, hi, lo = _number(info.get("dividendYield")), _number(info.get("fiftyTwoWeekHigh")), _number(info.get("fiftyTwoWeekLow"))
+    return TickerQuote(
+        symbol=symbol.upper(), name=info.get("shortName") or symbol.upper(), price=f"{price:,.2f}",
+        change=f"{change:+.2f}%", is_positive=price >= prev,
+        market_cap=_number(info.get("marketCap")), pe_ratio=_number(info.get("trailingPE")),
+        dividend_yield=f"{dy:.2f}%" if dy else None,          # yfinance reports this already in percent
+        high_52w=f"${hi:,.2f}" if hi else None, low_52w=f"${lo:,.2f}" if lo else None,
     )
-    
-    # Add alpha packet if completed
-    if session["status"] == AnalysisStatus.COMPLETED and "alpha_packet" in session:
-        from gateway.schema import AlphaPacket, QualityScores, DebateSummary
-        ap = session["alpha_packet"]
-        response.alpha_packet = AlphaPacket(**ap)
-    
-    # Add step-up challenge if waiting approval
-    if session["status"] == AnalysisStatus.WAITING_APPROVAL and "step_up_challenge" in session:
-        from gateway.schema import StepUpChallenge
-        response.step_up_challenge = StepUpChallenge(**session["step_up_challenge"])
-
-    # Add debate logs if available
-    if "debate_log" in session and os.path.exists(session["debate_log"]):
-        try:
-            import json
-            with open(session["debate_log"], "r") as f:
-                logs = json.load(f)
-                response.debate_log = logs
-        except Exception:
-            pass  # Ignore log reading errors
-    
-    return response
 
 
+@router.get("/api/v1/ticker/{symbol}/history", response_model=List[PricePoint], tags=["Market Data"])
+def get_ticker_history(symbol: str, period: str = "1d"):
+    """Closing prices for charts. Periods: 1d, 5d, 1mo, ytd, 1y."""
+    if period not in HISTORY_PERIODS:
+        raise HTTPException(status_code=422, detail=f"period must be one of {sorted(HISTORY_PERIODS)}")
+    try:
+        hist = yf.Ticker(symbol).history(period=period, interval=HISTORY_PERIODS[period])
+        points = [PricePoint(name=(idx.strftime("%H:%M") if period == "1d" else
+                                   idx.strftime("%m-%d %H:%M") if period == "5d" else idx.strftime("%Y-%m-%d")),
+                             price=round(float(row["Close"]), 2))
+                  for idx, row in hist.iterrows() if row["Close"] == row["Close"]]
+    except Exception as e:
+        raise _provider_error(f"history {symbol.upper()}", e)
+    if not points:
+        raise HTTPException(status_code=404, detail=f"No price history for {symbol.upper()} ({period})")
+    return points
 
-@app.post("/api/v1/approve/{session_id}", response_model=ApprovalResponse)
-async def approve_recommendation(
-    session_id: str, 
-    request: ApprovalRequest,
-    current_user: models.User = Depends(auth.get_current_analyst_user)
-):
-    """
-    Approve step-up challenge.
-    """
-    if session_id not in sessions:
+
+def _news_response(symbol: str, days: int, limit: int) -> NewsResponse:
+    news = get_news_stream(symbol, days=days, max_articles=limit)
+    if not news.get("success"):
+        failed = "; ".join(f"{p}: {m}" for p, m in news.get("providers_failed", {}).items())
+        raise HTTPException(status_code=502, detail=f"All news providers failed for {symbol}: {failed or news.get('error')}")
+    return NewsResponse(
+        articles=[NewsArticle(id=a["id"], title=a["title"], url=a.get("url"), source=a.get("source"),
+                              published_at=a.get("published_at"), summary=a.get("summary"),
+                              providers=a.get("providers", [])) for a in news["articles"]],
+        providers_failed=news.get("providers_failed", {}), warnings=news.get("warnings", []))
+
+
+@router.get("/api/v1/ticker/{symbol}/news", response_model=NewsResponse, tags=["Market Data"])
+def get_ticker_news(symbol: str, days: int = 7, limit: int = 8):
+    return _news_response(symbol.upper(), max(1, min(days, 30)), max(1, min(limit, 20)))
+
+
+@router.get("/api/v1/market/news", response_model=NewsResponse, tags=["Market Data"])
+def get_market_news(limit: int = 6):
+    return _news_response(MARKET_NEWS_SYMBOL, 2, max(1, min(limit, 20)))
+
+
+# ---- analysis sessions
+
+@router.post("/api/v1/analyze", response_model=AnalysisResponse)
+def analyze_ticker(request: AnalysisRequest, ctx: AppContext = Depends(get_ctx)):
+    """Start an analysis. Returns immediately; the debate runs in the thread pool. Poll /status."""
+    session_id = f"sess_{uuid.uuid4().hex[:16]}"
+    row = ctx.store.create(session_id, request.ticker, request.persona.value)
+    ctx.executor.submit(run_analysis, ctx, session_id, request.ticker, request.persona.value)
+    return AnalysisResponse(session_id=session_id, status=row["status"], ticker=row["ticker"],
+                            persona=row["persona"], created_at=row["created_at"], updated_at=row["updated_at"])
+
+
+def _session_or_404(ctx: AppContext, session_id: str) -> Dict[str, Any]:
+    row = ctx.store.get(session_id)
+    if row is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    
-    session = sessions[session_id]
-    
-    if session["status"] != AnalysisStatus.WAITING_APPROVAL:
+    return row
+
+
+@router.get("/api/v1/status/{session_id}", response_model=StatusResponse)
+def get_status(session_id: str, ctx: AppContext = Depends(get_ctx)):
+    """Full state of a session, built from the database and the persisted debate log."""
+    return status_response(_session_or_404(ctx, session_id), ctx.hitl)
+
+
+@router.get("/api/v1/sessions/{session_id}/logs", response_model=List[LogEvent])
+def get_session_logs(session_id: str, ctx: AppContext = Depends(get_ctx)):
+    """The debate's log lines so far, read from the persisted debate log."""
+    row = _session_or_404(ctx, session_id)
+    log = read_log(row.get("debate_log"))
+    return build_events(log) if log else []
+
+
+def _decide(ctx: AppContext, session_id: str, challenge_id: Optional[str], decision: str) -> Dict[str, Any]:
+    row = _session_or_404(ctx, session_id)
+    if row["status"] != AnalysisStatus.WAITING_APPROVAL.value:
         raise HTTPException(status_code=400, detail="Session not waiting for approval")
-    
-    # Approve challenge
-    approved = hitl_manager.approve_challenge(request.challenge_id)
-    
-    if not approved:
-        raise HTTPException(status_code=400, detail="Challenge approval failed")
-    
-    # Record decision
-    hitl_manager.record_decision(
-        session_id=session_id,
-        challenge_id=request.challenge_id,
-        decision="approved",
-        user_id=session["user_id"]
-    )
-    
-    # Update session
-    session["status"] = AnalysisStatus.COMPLETED
-    session["approval_status"] = "approved"
-    session["approved_at"] = datetime.now().isoformat()
-    session["updated_at"] = datetime.now().isoformat()
-    
-    # Get alpha packet
-    from gateway.schema import AlphaPacket
-    alpha_packet = AlphaPacket(**session["alpha_packet"])
-    
-    return ApprovalResponse(
-        session_id=session_id,
-        status=AnalysisStatus.COMPLETED,
-        approval_status="approved",
-        alpha_packet=alpha_packet,
-        ready_for_execution=True,
-        message="Recommendation approved. Ready for portfolio execution."
-    )
+    challenge, err = ctx.hitl.resolve_challenge(row.get("challenge"), challenge_id or "", decision)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+    approved = decision == "approved"
+    return ctx.store.update(
+        session_id, challenge=challenge, approval_status=decision,
+        status=(AnalysisStatus.COMPLETED if approved else AnalysisStatus.REJECTED).value)
 
 
-@app.post("/api/v1/reject/{session_id}", response_model=ApprovalResponse)
-async def reject_recommendation(
-    session_id: str,
-    current_user: models.User = Depends(auth.get_current_analyst_user)
-):
-    """
-    Reject step-up challenge.
-    """
-    if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    session = sessions[session_id]
-    
-    if session["status"] != AnalysisStatus.WAITING_APPROVAL:
-        raise HTTPException(status_code=400, detail="Session not waiting for approval")
-    
-    challenge_id = session.get("challenge_id")
-    if not challenge_id:
-        raise HTTPException(status_code=400, detail="No challenge found")
-    
-    # Reject challenge
-    rejected = hitl_manager.reject_challenge(challenge_id)
-    
-    if not rejected:
-        raise HTTPException(status_code=400, detail="Challenge rejection failed")
-    
-    # Record decision
-    hitl_manager.record_decision(
-        session_id=session_id,
-        challenge_id=challenge_id,
-        decision="rejected",
-        user_id=session["user_id"]
-    )
-    
-    # Update session
-    session["status"] = AnalysisStatus.REJECTED
-    session["approval_status"] = "rejected"
-    session["rejected_at"] = datetime.now().isoformat()
-    session["updated_at"] = datetime.now().isoformat()
-    
-    return ApprovalResponse(
-        session_id=session_id,
-        status=AnalysisStatus.REJECTED,
-        approval_status="rejected",
-        ready_for_execution=False,
-        message="Recommendation rejected by user."
-    )
+@router.post("/api/v1/approve/{session_id}", response_model=ApprovalResponse)
+def approve_recommendation(session_id: str, request: ApprovalRequest, ctx: AppContext = Depends(get_ctx)):
+    """Approve the step-up challenge of a session waiting for approval."""
+    row = _decide(ctx, session_id, request.challenge_id, "approved")
+    return ApprovalResponse(session_id=session_id, status=AnalysisStatus.COMPLETED, approval_status="approved",
+                            alpha_packet=AlphaPacket(**row["alpha_packet"]), ready_for_execution=True,
+                            message="Recommendation approved. Ready for portfolio execution.")
 
 
-@app.get("/api/v1/history", response_model=HistoryResponse)
-async def get_history(
-    user_id: str,
-    current_user: models.User = Depends(auth.get_current_active_user)
-):
-    """
-    Get user's analysis history.
-    """
-    if user_id not in user_history:
-        return HistoryResponse(
-            user_id=user_id,
-            analyses=[],
-            total_count=0
-        )
-    
-    history_items = [HistoryItem(**item) for item in user_history[user_id]]
-    
-    return HistoryResponse(
-        user_id=user_id,
-        analyses=history_items,
-        total_count=len(history_items)
-    )
+@router.post("/api/v1/reject/{session_id}", response_model=ApprovalResponse)
+def reject_recommendation(session_id: str, ctx: AppContext = Depends(get_ctx)):
+    """Reject the step-up challenge of a session waiting for approval."""
+    row = _session_or_404(ctx, session_id)
+    challenge_id = (row.get("challenge") or {}).get("challenge_id")
+    _decide(ctx, session_id, challenge_id, "rejected")
+    return ApprovalResponse(session_id=session_id, status=AnalysisStatus.REJECTED, approval_status="rejected",
+                            ready_for_execution=False, message="Recommendation rejected by user.")
 
 
-
-@app.get("/api/v1/chat/history", response_model=List[ChatResponse])
-async def get_chat_history(
-    user_id: str,
-    limit: int = 50,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_active_user)
-):
-    """
-    Get chat history for a user.
-    """
-    try:
-        history = db.query(models.ChatMessage).filter(
-            models.ChatMessage.user_id == user_id
-        ).order_by(models.ChatMessage.timestamp.asc()).limit(limit).all()
-        
-        return [
-            ChatResponse(
-                response=msg.message,
-                timestamp=msg.timestamp,
-                role=msg.role
-            ) for msg in history
-        ]
-    except Exception as e:
-        logger.error(f"Error fetching chat history: {e}")
-        return []
+@router.get("/api/v1/history", response_model=HistoryResponse)
+def get_history(limit: int = 50, ctx: AppContext = Depends(get_ctx)):
+    """Past analyses, newest first (persisted in SQLite)."""
+    rows = ctx.store.history(max(1, min(limit, 200)))
+    items = [HistoryItem(session_id=r["session_id"], ticker=r["ticker"], persona=r["persona"], status=r["status"],
+                         recommendation=r["recommendation"], confidence=r["confidence"], created_at=r["created_at"],
+                         alpha_packet_id=(r["alpha_packet"] or {}).get("packet_id"), error=r["error"])
+             for r in rows]
+    return HistoryResponse(analyses=items, total_count=ctx.store.count())
 
 
-@app.post("/api/v1/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
-    """
-    Chat with Market AI (Stateful via SQLite).
-    """
-    try:
-        # 1. Save User Message
-        user_msg = models.ChatMessage(
-            user_id=request.user_id,
-            role="user",
-            message=request.message,
-            timestamp=datetime.now().isoformat()
-        )
-        db.add(user_msg)
+# ---- chat (persisted in SQLite)
+
+@router.get("/api/v1/chat/history", response_model=List[ChatResponse])
+def get_chat_history(limit: int = 50, ctx: AppContext = Depends(get_ctx)):
+    """The most recent chat messages, oldest first."""
+    with ctx.session_factory() as db:
+        rows = (db.query(models.ChatMessage).filter(models.ChatMessage.user_id == LOCAL_USER)
+                .order_by(models.ChatMessage.id.desc()).limit(max(1, min(limit, 200))).all())
+        return [ChatResponse(response=m.message, timestamp=m.timestamp, role=m.role) for m in reversed(rows)]
+
+
+@router.post("/api/v1/chat", response_model=ChatResponse)
+def chat_endpoint(request: ChatRequest, ctx: AppContext = Depends(get_ctx)):
+    """Chat with the Kai assistant. Fails with 503 when no chat model is configured; no canned
+    reply is invented or stored."""
+    if ctx.groq is None:
+        raise HTTPException(status_code=503, detail="Chat is unavailable: GROQ_API_KEY is not set.")
+    with ctx.session_factory() as db:
+        db.add(models.ChatMessage(user_id=LOCAL_USER, role="user", message=request.message, timestamp=_now()))
         db.commit()
-
-        # 2. Get Context (Last 5 messages)
-        history = db.query(models.ChatMessage).filter(
-            models.ChatMessage.user_id == request.user_id
-        ).order_by(models.ChatMessage.id.desc()).limit(5).all()
-        
-        # System Prompt setup
-        messages = [{"role": "system", "content": "You are Kai, an advanced AI investment assistant. Be concise, professional, and data-driven."}]
-        for msg in reversed(history):
-            messages.append({"role": msg.role, "content": msg.message})
-            
-        # 3. Call Groq
-        if not groq_client:
-             # Mock response if API key missing
-             ai_response = "I am currently in offline mode. Please configure my Groq API key."
-        else:
-            completion = groq_client.chat.completions.create(
-                messages=messages,
-                model="llama-3.3-70b-versatile",
-            )
-            ai_response = completion.choices[0].message.content
-
-        # 4. Save AI Response
-        ai_msg = models.ChatMessage(
-            user_id=request.user_id,
-            role="assistant",
-            message=ai_response,
-            timestamp=datetime.now().isoformat()
-        )
-        db.add(ai_msg)
-        db.commit()
-
-        return ChatResponse(response=ai_response, timestamp=ai_msg.timestamp, role="assistant")
-
+        recent = (db.query(models.ChatMessage).filter(models.ChatMessage.user_id == LOCAL_USER)
+                  .order_by(models.ChatMessage.id.desc()).limit(5).all())
+    messages = [{"role": "system", "content": CHAT_SYSTEM_PROMPT}] + [
+        {"role": m.role, "content": m.message} for m in reversed(recent)]
+    try:
+        completion = ctx.groq.chat.completions.create(messages=messages, model=CHAT_MODEL)
+        answer = completion.choices[0].message.content
     except Exception as e:
-        print(f"Chat Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Chat model call failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"Chat model call failed: {e}")
+    stamp = _now()
+    with ctx.session_factory() as db:
+        db.add(models.ChatMessage(user_id=LOCAL_USER, role="assistant", message=answer, timestamp=stamp))
+        db.commit()
+    return ChatResponse(response=answer, timestamp=stamp, role="assistant")
 
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat()
-    }
+# --------------------------------------------------------------------------- app factory
+
+def create_app(db_url: Optional[str] = None, *, coordinator_factory=None, sigma: Optional[SigmaAgent] = None,
+               ap2: Optional[AP2Handler] = None, settings: Optional[GatewaySettings] = None,
+               groq_client: Optional[Any] = None) -> FastAPI:
+    """
+    Build a gateway instance. Nothing is created on disk until the app starts (lifespan).
+
+    Args:
+        db_url: SQLAlchemy URL (default: KAI_DB_URL or sqlite:///./kai.db)
+        coordinator_factory: (ticker, RiskPersona) -> DebateCoordinator; injectable for tests
+        sigma, ap2: injectable judge and signer
+        settings: override environment settings
+        groq_client: chat model client; default is created from GROQ_API_KEY if set
+    """
+    load_dotenv()
+    cfg = settings or load_settings()
+    engine = make_engine(db_url or cfg.db_url)
+    factory = make_session_factory(engine)
+    if groq_client is None and os.getenv("GROQ_API_KEY"):
+        from groq import Groq
+        groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+    ctx = AppContext(
+        settings=cfg, session_factory=factory, store=SessionStore(factory), hitl=HITLManager(),
+        ap2=ap2 or AP2Handler(), sigma=sigma or SigmaAgent(),
+        executor=ThreadPoolExecutor(max_workers=cfg.max_concurrent_debates, thread_name_prefix="kai-debate"),
+        coordinator_factory=coordinator_factory or (lambda ticker, persona: DebateCoordinator(ticker, persona)),
+        groq=groq_client,
+    )
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        Base.metadata.create_all(bind=engine)
+        interrupted = ctx.store.mark_interrupted()
+        if interrupted:
+            logger.warning("Marked %d analysis session(s) left running by a previous process as failed.", interrupted)
+        yield
+        ctx.executor.shutdown(wait=False, cancel_futures=True)
+        engine.dispose()
+
+    app = FastAPI(title="Kai - Economist Gateway API", description="Local API for the explainable investing copilot",
+                  version="2.0.0", lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware, allow_origins=cfg.cors_origins, allow_credentials=False,
+        allow_methods=["GET", "POST"], allow_headers=["Content-Type"],
+    )
+    app.state.ctx = ctx
+    app.include_router(router)
+    return app
+
+
+app = create_app()
 
 
 if __name__ == "__main__":
     import uvicorn
-    
-    host = os.getenv("GATEWAY_HOST", "0.0.0.0")
-    port = int(os.getenv("GATEWAY_PORT", 8080))
-    
-    print(f"Starting Kai - Economist Gateway API on {host}:{port}")
-    uvicorn.run(app, host=host, port=port)
+
+    settings = load_settings()
+    print(f"Starting Kai - Economist Gateway API on {settings.host}:{settings.port} (no authentication)")
+    uvicorn.run(app, host=settings.host, port=settings.port)

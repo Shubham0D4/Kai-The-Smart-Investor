@@ -3,7 +3,6 @@ Tests that exercise the SEC, news and yfinance code paths against the recorded
 fixtures in tests/fixtures (no network), plus the fake LLM client and startup safety.
 """
 
-import importlib
 import os
 
 import pytest
@@ -38,24 +37,16 @@ def test_network_is_blocked_by_default():
         httpx.get("https://example.com")
 
 
-def _login(client):
-    client.post("/auth/register", json={"username": "u", "email": "u@t.com", "password": "p"})
-    token = client.post("/auth/token", data={"username": "u", "password": "p"}).json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
-
-
 def test_yfinance_quote_and_history(client):
-    headers = _login(client)
-    quote = client.get("/api/v1/ticker/AAPL/quote", headers=headers)
+    quote = client.get("/api/v1/ticker/AAPL/quote")
     assert quote.status_code == 200
     assert quote.json()["symbol"] == "AAPL"
-    hist = client.get("/api/v1/ticker/AAPL/history?period=1mo", headers=headers)
+    hist = client.get("/api/v1/ticker/AAPL/history?period=1mo")
     assert hist.status_code == 200 and len(hist.json()) > 5
 
 
 def test_yfinance_indices(client):
-    headers = _login(client)
-    res = client.get("/api/v1/market/indices", headers=headers)
+    res = client.get("/api/v1/market/indices")
     assert [r["name"] for r in res.json()] == ["S&P 500", "NASDAQ", "DOW", "VIX"]
 
 
@@ -67,18 +58,6 @@ def test_fake_llm_client_interface():
     assert r.usage_metadata.total_token_count > 0
     assert fake.calls == ["a", "b"]
     assert fake.generate_content("c").text == "two"  # last item repeats
-
-
-def test_missing_gateway_secret_fails_startup(monkeypatch):
-    import gateway.auth as auth
-    monkeypatch.delenv("GATEWAY_SECRET_KEY")
-    monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: False)
-    try:
-        with pytest.raises(RuntimeError, match="GATEWAY_SECRET_KEY"):
-            importlib.reload(auth)
-    finally:
-        monkeypatch.setenv("GATEWAY_SECRET_KEY", "test-only-secret-not-for-production")
-        importlib.reload(auth)
 
 
 def test_ap2_generates_key_at_env_path_when_missing(tmp_path, monkeypatch):

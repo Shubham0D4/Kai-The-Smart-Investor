@@ -1,44 +1,54 @@
 import React from 'react';
-import { OverlayTrigger, Popover, Badge } from 'react-bootstrap';
+import { OverlayTrigger, Popover } from 'react-bootstrap';
 import { Database } from 'lucide-react';
+import { withUnit } from '../utils/format';
 
-const CitationPopover = ({ sourceId }) => {
-    // In a real app, this would fetch the specific chunk from the backend/context using sourceId
-    const mockSourceData = {
-        title: `Source Artifact #${sourceId}`,
-        content: "This is a raw data chunk retrieved from the Semantic Cache. It represents the grounded truth used by the agent.",
-        confidence: "98.5%"
-    };
+/**
+ * A reference to one evidence record (an id like "sec:revenue:FY2026" or "quant:forward.prob_up_bootstrap").
+ * The popover shows the real record from the debate: its value, period and source. An id that is
+ * not in the supplied evidence says so instead of inventing a source.
+ */
+const CitationPopover = ({ evidenceId, evidence = {} }) => {
+    const record = evidence[evidenceId];
 
     const popover = (
-        <Popover id={`popover-citation-${sourceId}`} className="shadow-lg">
-            <Popover.Header as="h3" className="d-flex align-items-center gap-2 bg-light">
-                <Database size={16} className="text-primary" />
-                <span className="fw-bold">{mockSourceData.title}</span>
+        <Popover id={`popover-evidence-${evidenceId}`} className="shadow-lg" style={{ maxWidth: 380 }}>
+            <Popover.Header as="h3" className="d-flex align-items-center gap-2">
+                <Database size={15} className="text-muted flex-shrink-0" />
+                <span className="font-monospace text-break" style={{ fontSize: '0.75rem' }}>{evidenceId}</span>
             </Popover.Header>
             <Popover.Body>
-                <p className="mb-2 small text-muted font-monospace border p-2 rounded bg-white">
-                    {mockSourceData.content}
-                </p>
-                <div className="d-flex justify-content-between align-items-center">
-                    <small className="text-success fw-bold">Confidence: {mockSourceData.confidence}</small>
-                    <Badge bg="secondary" style={{ fontSize: '0.6em' }}>MCP-001</Badge>
-                </div>
+                {record ? (
+                    <>
+                        <div className="fw-semibold mb-1">{record.label}</div>
+                        {record.value !== null && record.value !== undefined && (
+                            <div className="font-monospace mb-1">{withUnit(record.value, record.unit)}</div>
+                        )}
+                        {record.text && (
+                            <p className="small text-muted border rounded p-2 mb-2">{record.text}</p>
+                        )}
+                        {record.period && <div className="small text-muted">Period: {record.period}</div>}
+                        <div className="small text-muted text-break">Source: {record.source}</div>
+                        {record.url && (
+                            <a href={record.url} target="_blank" rel="noreferrer" className="small text-break">
+                                Open source
+                            </a>
+                        )}
+                    </>
+                ) : (
+                    <div className="small neg-text">
+                        This id is not in the evidence the agent was given, so it cannot be traced to a source.
+                    </div>
+                )}
             </Popover.Body>
         </Popover>
     );
 
     return (
         <OverlayTrigger trigger="click" placement="top" overlay={popover} rootClose>
-            <Badge
-                bg="light"
-                text="dark"
-                className="ms-1 border cursor-pointer citation-badge text-decoration-none"
-                style={{ cursor: 'pointer', transition: 'all 0.2s' }}
-                title="Click to verify source"
-            >
-                [{sourceId}]
-            </Badge>
+            <button type="button" className={`kai-evidence${record ? '' : ' missing'}`} title="Click to see the source">
+                {evidenceId}
+            </button>
         </OverlayTrigger>
     );
 };

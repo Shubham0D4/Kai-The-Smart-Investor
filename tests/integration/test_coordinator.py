@@ -68,3 +68,15 @@ def test_sec_down_leaves_one_agent_so_no_debate(schema_llm, failing_sources, cle
 def test_run_debate_takes_no_user_valuation_inputs():
     params = set(inspect.signature(DebateCoordinator.run_debate).parameters)
     assert not {"gamma_price", "gamma_eps", "gamma_growth_rate"} & params
+
+
+def test_debate_ids_are_unique_and_logs_written_atomically(tmp_path):
+    from coordinator.debate_logger import DebateLogger
+    a, b = DebateLogger("AAPL", "zen", str(tmp_path)), DebateLogger("AAPL", "zen", str(tmp_path))
+    assert a.debate_id != b.debate_id and a.log_path != b.log_path     # concurrent debates, one second
+    a.log_system_message("before any round")
+    a.log_round_start(1)
+    a.flush()
+    assert sorted(p.name for p in tmp_path.iterdir()) == [os.path.basename(a.log_path)]   # no temp files left
+    log = json.loads(open(a.log_path).read())
+    assert [e["message"] for e in log["pre_round_logs"]] == ["before any round"]

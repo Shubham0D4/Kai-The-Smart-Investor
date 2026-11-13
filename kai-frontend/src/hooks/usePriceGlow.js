@@ -1,33 +1,27 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 
+const FLASH_MS = 1200;
+
+/** CSS class that flashes green/red for a moment when the price moves up/down. */
 export const usePriceGlow = (currentPrice) => {
+    // Previous price is state (not a ref) and is compared during render, so no state is set
+    // synchronously inside an effect.
+    const [prev, setPrev] = useState(currentPrice);
     const [glowClass, setGlowClass] = useState('');
-    const prevPriceRef = useRef(currentPrice);
+
+    if (currentPrice !== prev) {
+        setPrev(currentPrice);
+        if (currentPrice !== null && currentPrice !== undefined && prev !== null && prev !== undefined) {
+            if (currentPrice > prev) setGlowClass('glow-green-flash');
+            else if (currentPrice < prev) setGlowClass('glow-red-flash');
+        }
+    }
 
     useEffect(() => {
-        if (currentPrice === null || currentPrice === undefined) return;
-
-        const prevPrice = prevPriceRef.current;
-
-        if (prevPrice !== null && prevPrice !== undefined) {
-            if (currentPrice > prevPrice) {
-                setGlowClass('glow-green-flash');
-            } else if (currentPrice < prevPrice) {
-                setGlowClass('glow-red-flash');
-            }
-        }
-
-        // Update ref
-        prevPriceRef.current = currentPrice;
-
-        // Reset animation class after it plays (approx 1s)
-        const timer = setTimeout(() => {
-            setGlowClass('');
-        }, 1200);
-
+        if (!glowClass) return undefined;
+        const timer = setTimeout(() => setGlowClass(''), FLASH_MS);
         return () => clearTimeout(timer);
-
-    }, [currentPrice]);
+    }, [glowClass, currentPrice]);
 
     return glowClass;
 };

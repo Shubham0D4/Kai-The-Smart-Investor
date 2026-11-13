@@ -1,181 +1,174 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getSessionLogs, getAnalysisStatus } from '../services/api';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CommitteeContext } from './committee';
+import {
+    approveMandate, getAnalysisStatus, initiateAnalysis, rejectMandate,
+} from '../services/api';
 
-// Context for the Committee (Agents + Debate State)
-const CommitteeContext = createContext();
+const STORAGE_KEY = 'kai_session_id';
+const POLL_MS = 2000;
+const MAX_POLL_FAILURES = 5;
 
-export const useCommittee = () => useContext(CommitteeContext);
-
-export const CommitteeProvider = ({ children }) => {
-    // State for active agents in the session
-    const [activeAgents, setActiveAgents] = useState({
-        charlie: { name: 'Charlie', role: 'Fundamental', status: 'idle' },
-        delta: { name: 'Delta', role: 'Sentiment', status: 'idle' },
-        gamma: { name: 'Gamma', role: 'Valuation', status: 'idle' },
-        sigma: { name: 'Sigma', role: 'Judge', status: 'idle' }
-    });
-
-    // State for the currently active tool call (for visualization)
-    const [activeToolCall, setActiveToolCall] = useState(null);
-    // Example: { agent: 'charlie', tool: 'fetch_filing_data', status: 'running' }
-
-    // State for debate logs/messages
-    const [debateLogs, setDebateLogs] = useState([]);
-
-    // State for Active Session
-    const [sessionId, setSessionId] = useState(null);
-    const [currentTicker, setCurrentTicker] = useState('AAPL'); // Default fallback
-
-    // State for the final Sigma Decision Report
-    const [finalReport, setFinalReport] = useState(null);
-
-    // State for Agent Protocol Mandate Requests (HITL)
-    const [mandateRequest, setMandateRequest] = useState(null);
-
-    // State for Technical Traces (Observability)
-    const [traceLogs, setTraceLogs] = useState([]);
-
-    // Polling effect for logs
-    useEffect(() => {
-        let interval;
-        let retryCount = 0;
-        const MAX_RETRIES = 5;
-
-        if (sessionId) {
-            const fetchLogs = async () => {
-                try {
-                    const logs = await getSessionLogs(sessionId);
-                    retryCount = 0; // Reset on success
-
-                    if (logs && logs.length > 0) {
-                        setDebateLogs(logs);
-
-                        // Derive active status from latest logs
-                        const latestLog = logs[logs.length - 1];
-                        const newAgents = { ...activeAgents };
-                        Object.keys(newAgents).forEach(k => newAgents[k].status = 'idle');
-                        let currentTool = null;
-
-                        if (latestLog.agent === 'system') {
-                            const msg = latestLog.message.toLowerCase();
-                            if (msg.includes('charlie')) {
-                                newAgents.charlie.status = 'thinking';
-                                currentTool = { agent: 'charlie', tool: 'SEC Filing Analysis', status: 'running' };
-                            } else if (msg.includes('delta')) {
-                                newAgents.delta.status = 'thinking';
-                                currentTool = { agent: 'delta', tool: 'Sentiment Analysis', status: 'running' };
-                            } else if (msg.includes('gamma')) {
-                                newAgents.gamma.status = 'thinking';
-                                currentTool = { agent: 'gamma', tool: 'Valuation Math', status: 'running' };
-                            } else if (msg.includes('sigma')) {
-                                newAgents.sigma.status = 'thinking';
-                            }
-                        }
-
-                        setActiveAgents(newAgents);
-                        setActiveToolCall(currentTool);
-                    }
-
-                    // Also poll status to check for completion and alpha packet
-                    const statusData = await getAnalysisStatus(sessionId);
-                    if (statusData && statusData.ticker) {
-                        setCurrentTicker(statusData.ticker);
-                    }
-
-                    if (statusData && statusData.status === 'COMPLETED' && statusData.alpha_packet) {
-                        const ap = statusData.alpha_packet;
-                        setFinalReport({
-                            ticker: statusData.ticker,
-                            signal: ap.recommendation,
-                            confidence: ap.confidence,
-                            summary: ap.debate_summary?.consensus || "Analysis complete.",
-                            scores: {
-                                faithfulness: ap.quality_scores?.faithfulness || 0,
-                                integrity: ap.quality_scores?.integrity || 0
-                            },
-                            agentsMissing: ap.verdict_detail?.agents_missing || [],
-                            warnings: ap.verdict_detail?.warnings || [],
-                            reason: ap.verdict_detail?.reason || null
-                        });
-
-                        // Stop polling once completed
-                        if (interval) clearInterval(interval);
-                    }
-                } catch (error) {
-                    console.error("Polling error:", error);
-
-                    if (error.response && error.response.status === 401) {
-                        console.error("Authentication lost during polling. Stopping.");
-                        if (interval) clearInterval(interval);
-                        return;
-                    }
-
-                    retryCount++;
-                    if (retryCount >= MAX_RETRIES) {
-                        console.warn("Max polling retries reached. Context may be stale.");
-                        if (interval) clearInterval(interval);
-                    }
-                }
-            };
-
-            fetchLogs();
-            interval = setInterval(fetchLogs, 4000); // Poll every 4 seconds for reliability
-        }
-
-        return () => {
-            if (interval) clearInterval(interval);
-        };
-    }, [sessionId]);
-
-    // Mock function to simulate receiving a tool call event (in real app, this comes from WebSocket/SSE)
-    const simulateToolCall = (agent, toolName) => {
-        setActiveToolCall({ agent, tool: toolName, status: 'running' });
-
-        // Auto-clear after random duration to simulate completion
-        setTimeout(() => {
-            setActiveToolCall(null);
-
-            // Add a trace log for this completed action
-            const latency = Math.floor(Math.random() * 800) + 200; // 200-1000ms
-            const tokens = Math.floor(Math.random() * 500) + 50; // 50-550 tokens
-
-            setTraceLogs(prev => [...prev, {
-                id: 'TRC-' + Math.floor(Math.random() * 100000),
-                timestamp: new Date().toISOString(),
-                agent: agent,
-                step: toolName,
-                latency: latency,
-                tokens: tokens,
-                status: 'SUCCESS'
-            }]);
-
-        }, 2500);
-    };
-
-    const addLog = (log) => {
-        setDebateLogs(prev => [...prev, log]);
-    };
-
-    const value = {
-        activeAgents,
-        activeToolCall,
-        sessionId,
-        setSessionId,
-        debateLogs,
-        finalReport,
-        setFinalReport,
-        mandateRequest,
-        setMandateRequest,
-        traceLogs,
-        currentTicker,
-        setCurrentTicker,
-        simulateToolCall, // Exposed for testing/demo
-        addLog
-    };
-
-    return (
-        <CommitteeContext.Provider value={value}>
-            {children}
-        </CommitteeContext.Provider>
-    );
+// localStorage can be blocked or empty (private windows): the app must work without it.
+const readStoredSession = () => {
+    try {
+        return window.localStorage.getItem(STORAGE_KEY);
+    } catch {
+        return null;
+    }
 };
+const storeSession = (id) => {
+    try {
+        if (id) window.localStorage.setItem(STORAGE_KEY, id);
+        else window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+        /* per-viewer convenience only */
+    }
+};
+
+/**
+ * Holds the one analysis session the UI is showing. Everything it exposes comes from the
+ * backend's /status response (which is built from the database and the persisted debate log):
+ * nothing is simulated, canned or randomly generated on the client.
+ */
+export const CommitteeProvider = ({ children }) => {
+    const [sessionId, setSessionId] = useState(readStoredSession);
+    const [session, setSession] = useState(null);
+    const [starting, setStarting] = useState(false);
+    const [startError, setStartError] = useState(null);
+    const [pollError, setPollError] = useState(null);
+    const [approvalError, setApprovalError] = useState(null);
+    const [decidingApproval, setDecidingApproval] = useState(false);
+    const [dismissedChallenge, setDismissedChallenge] = useState(null);
+    const [pollNonce, setPollNonce] = useState(0);        // bumped by 'retry' to restart a stopped poll loop
+    const failures = useRef(0);
+
+    const fetchStatus = useCallback(async (id) => {
+        try {
+            const data = await getAnalysisStatus(id);
+            failures.current = 0;
+            setPollError(null);
+            setSession(data);
+            return data;
+        } catch (error) {
+            if (error.status === 404) {                      // a stored id the server no longer has
+                storeSession(null);
+                setSessionId(null);
+                setSession(null);
+                return null;
+            }
+            failures.current += 1;
+            setPollError(error.message);
+            return undefined;
+        }
+    }, []);
+
+    // Poll while the analysis runs. Terminal states (completed, failed, rejected, waiting for the
+    // user) do not change on their own, so polling stops there and resumes if a new run starts.
+    const status = session?.status;
+    const polling = Boolean(sessionId) && (status === undefined || status === 'running');
+    useEffect(() => {
+        if (!polling) return undefined;
+        let cancelled = false;
+        let timer;
+        const tick = async () => {
+            await fetchStatus(sessionId);
+            if (cancelled || failures.current >= MAX_POLL_FAILURES) return;
+            timer = setTimeout(tick, POLL_MS);
+        };
+        tick();
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [polling, sessionId, fetchStatus, pollNonce]);
+
+    const startAnalysis = useCallback(async (ticker, persona) => {
+        setStarting(true);
+        setStartError(null);
+        try {
+            const created = await initiateAnalysis(ticker, persona);
+            failures.current = 0;
+            storeSession(created.session_id);
+            setSession(null);
+            setPollError(null);
+            setApprovalError(null);
+            setDismissedChallenge(null);
+            setSessionId(created.session_id);
+            return created;
+        } catch (error) {
+            setStartError(error.message);
+            return null;
+        } finally {
+            setStarting(false);
+        }
+    }, []);
+
+    const loadSession = useCallback((id) => {
+        failures.current = 0;
+        storeSession(id);
+        setSession(null);
+        setPollError(null);
+        setApprovalError(null);
+        setDismissedChallenge(null);
+        setSessionId(id);
+    }, []);
+
+    const clearSession = useCallback(() => {
+        storeSession(null);
+        setSession(null);
+        setSessionId(null);
+        setPollError(null);
+    }, []);
+
+    const retryPolling = useCallback(() => {
+        failures.current = 0;
+        setPollError(null);
+        setPollNonce((n) => n + 1);
+    }, []);
+
+    const decide = useCallback(async (decision) => {
+        const challenge = session?.step_up_challenge;
+        if (!session || !challenge) return false;
+        setDecidingApproval(true);
+        setApprovalError(null);
+        try {
+            if (decision === 'approve') await approveMandate(session.session_id, challenge.challenge_id);
+            else await rejectMandate(session.session_id);
+            await fetchStatus(session.session_id);
+            return true;
+        } catch (error) {
+            setApprovalError(error.message);
+            await fetchStatus(session.session_id);          // e.g. the challenge expired meanwhile
+            return false;
+        } finally {
+            setDecidingApproval(false);
+        }
+    }, [session, fetchStatus]);
+
+    const value = useMemo(() => ({
+        sessionId,
+        session,
+        debate: session?.debate ?? null,
+        sigma: session?.sigma ?? null,
+        currentTicker: session?.ticker ?? null,
+        starting,
+        startError,
+        pollError,
+        approvalError,
+        decidingApproval,
+        dismissedChallenge,
+        startAnalysis,
+        loadSession,
+        clearSession,
+        retryPolling,
+        approve: () => decide('approve'),
+        reject: () => decide('reject'),
+        dismissApproval: (challengeId) => setDismissedChallenge(challengeId),
+        reopenApproval: () => setDismissedChallenge(null),
+    }), [sessionId, session, starting, startError, pollError, approvalError, decidingApproval,
+        dismissedChallenge, startAnalysis, loadSession, clearSession, retryPolling, decide]);
+
+    return <CommitteeContext.Provider value={value}>{children}</CommitteeContext.Provider>;
+};
+
+export default CommitteeProvider;

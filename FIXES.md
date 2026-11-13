@@ -16,16 +16,21 @@
 
 ## Bugs and security
 - [x] B1 ap2_private_key.pem committed to a public repo.
-- [x] B2 Hardcoded default JWT secret in gateway/auth.py.
-- [ ] B3 /auth/register accepts role from the client (anyone can be admin).
-- [ ] B4 user_id comes from request body, not the token; /chat and /status have no auth.
-- [ ] B5 run_analysis is async but runs blocking code; server freezes during a debate.
-- [ ] B6 Sessions and history are in-memory dicts.
+- [-] B2 Hardcoded default JWT secret in gateway/auth.py. (dropped: auth removed; the file and the secret are gone)
+- [-] B3 /auth/register accepts role from the client (anyone can be admin). (dropped: auth removed)
+- [-] B4 user_id comes from request body, not the token; /chat and /status have no auth. (dropped: auth removed; user_id removed everywhere, one constant LOCAL_USER server-side)
+- [x] B5 run_analysis is async but runs blocking code; server freezes during a debate.
+- [x] B6 Sessions and history are in-memory dicts.
 - [x] B7 Token limit counts round 1 only; Sigma's LLM synthesis runs twice.
-- [ ] B8 Frontend shows Math.random() signals, prices, trace metrics; CitationPopover is mock.
-- [ ] B9 Gateway returns hardcoded index values when yfinance fails.
+- [x] B8 Frontend shows Math.random() signals, prices, trace metrics; CitationPopover is mock.
+- [x] B9 Gateway returns hardcoded index values when yfinance fails.
 - [x] B10 Tests need live API keys; mcp_config.json has a hardcoded local path;
        README clone URL is wrong.
+
+## Deployment
+- [ ] Add auth before any public deployment. Kai is a single-user local app: no authentication,
+      the gateway listens on 127.0.0.1 and accepts browser requests only from the Vite dev origin
+      (GATEWAY_HOST / GATEWAY_CORS_ORIGINS). Nothing here is safe to expose on a network as is.
 
 ## Statistics (phase 4.5)
 - [x] Q1 Add a deterministic quant layer (quant/): return distribution, beta/correlation,
@@ -36,9 +41,10 @@
 - [ ] Q5 Run scripts/calibration_backtest.py (live) so calibration stops being "unavailable".
 - [ ] Q6 Base rates need a cross-sectional case table; one stock's 10-year history gives too few
       similar cases (7 of 37 for AAPL).
-- [ ] Q7 Frontend does not show the quant report, Q/C factors or contradictions yet.
+- [x] Q7 Frontend does not show the quant report, Q/C factors or contradictions yet. (done in phase 5+6)
 
 ## Rules for every session
+- Checkbox legend: [x] fixed, [ ] open, [-] dropped (no longer applies).
 - One phase = one branch = one PR. Do not touch other phases.
 - Tests must pass offline (no API keys, no network).
 - Tick items here when fixed, and note anything new you find.
@@ -154,3 +160,62 @@ Still open / found:
   any environment must install from requirements.txt to match.
 - Found: AAPL's Monte Carlo DCF gives P(fair value > price) = 0.06, so bullish agents are
   flagged as contradicting the report on every fixture run.
+
+## Phase 5+6 (branch phase-5-app): simplify the gateway, fix the frontend
+- Auth removed (gateway/auth.py, /auth/*, User model, route guards, Login/Register/AuthContext,
+  token interceptor, python-jose/passlib/bcrypt and python-multipart from requirements.txt).
+  user_id is gone from every request, query and schema; LOCAL_USER ("local") is the only user key.
+  GATEWAY_HOST defaults to 127.0.0.1; CORS is limited to the Vite origins; both overridable.
+- B5: debates run in a ThreadPoolExecutor (KAI_MAX_CONCURRENT_DEBATES, default 2); endpoints are
+  plain `def`. test_status_responds_while_a_debate_is_running blocks a debate mid-run and checks
+  /status, /health, /logs and /history still answer; it fails (rather than hangs) if the debate
+  ever runs inline.
+- B6: sessions, history and chat are in SQLite (KAI_DB_URL, default ./kai.db; the old users.db is
+  unused). gateway/store.py is the only place that touches session rows. The coordinator is never
+  stored: live state is built from the persisted debate log, which is now written atomically,
+  checkpointed after every agent step, and has unique ids. The HITL challenge is a plain dict in
+  the session row, so a pending approval survives a restart; sessions left `running` by a dead
+  process are marked failed at startup.
+- B9: yfinance failures return 502 (per-index `available:false` when only some fail), no quote or
+  history -> 404; the hardcoded index values are gone. Chat without GROQ_API_KEY is 503, not a
+  canned reply. News endpoints (/ticker/{symbol}/news, /market/news) use the existing providers.
+- Responses: StatusResponse carries `debate` (per-agent round 1/2/3 output, evidence,
+  verification of round-1 and round-3 claims, outcome, token use, events, quant report), `sigma`
+  (the validated verdict) and the signed alpha packet. They reuse the backend models, so the API
+  cannot drift from what the judge produces.
+- B8: no Math.random(), simulated action or mock data source remains in the frontend (a test
+  scans for them). Dashboard news, index values, prices, trace table and citations are real or
+  say "unavailable". The UI renders stance, claims with clickable evidence, round-2 critiques,
+  round-3 changes, Sigma's verdict, gates and contradiction flags, the quant report with sample
+  sizes and kinds, and the loading / failed / circuit-breaker / approval states.
+- Frontend tests (npm test, vitest): real /status payloads exported from the backend
+  (tests/integration/test_ui_fixtures.py, which fails if the API shape drifts from them).
+- Fixed while here: chat history dropped `role` (every message looked like the assistant's) and
+  returned the oldest 50 instead of the latest; dividend yield was multiplied by 100 again;
+  concurrent debates for one ticker in the same second shared a log file; the Groq client was
+  created before load_dotenv(); system messages before round 1 were dropped from the log;
+  pre-existing lint errors (31) in the frontend.
+- Found: .env.example had real API keys pasted into it (uncommitted, never pushed). They were
+  moved to the gitignored .env and the example restored to blanks. Treat those keys as exposed
+  (they appeared in session output) and rotate them.
+- Not done: the frontend has been linted, built and rendered under jsdom with real payloads but
+  never opened in a real browser against a live backend; charts and layout are unchecked
+  visually. The 4.5 quant UI shows what the report contains; Q7 is now ticked.
+- Open: price shown next to the fair-value range is Gamma's fetched last price, not live.
+
+## UI redesign (after phase 5+6)
+- New design system in kai-frontend/src/index.css: light theme by default (dark is an
+  alternative), driven by Bootstrap's data-bs-theme so Bootstrap components follow the theme;
+  one accent colour; green/red/amber only where they carry meaning; a defined type scale.
+- Fonts: Inter and JetBrains Mono are bundled with @fontsource-variable (they work offline;
+  before, "Inter" was named but never loaded). Tabular figures only on numeric columns.
+- Sticky header with brand mark, market strip, full-width search card, "How it works" when no
+  analysis is open, tinted status chips instead of solid badges, aligned quant tables with a
+  labelled fair-value range, consistent cards, modal, chat and ticker page. Favicon and page
+  title are Kai's own. Approval wording from the backend no longer has emoji or "tap" phrasing.
+- Checked visually in headless Chromium (light, dark, 390px phone width) against the real /status
+  fixtures. Not checked: Safari/Firefox, a live backend with a real model's output, a formal
+  accessibility audit (contrast was chosen to meet WCAG AA by design, not measured).
+- Screenshots were deliberately NOT added to the repo: the fixtures use a fake LLM, so their
+  agent text ("canned risk", "Value of sec:revenue:FY2022") would misrepresent the product in a
+  pitch. Take them from a real run.

@@ -95,9 +95,15 @@ class DebateCoordinator:
             raise TokenLimitExceeded(
                 f"HARD LIMIT EXCEEDED: Debate used {self.total_tokens_used} tokens (Limit: {self.TOKEN_LIMIT})")
 
+    def _checkpoint(self):
+        """Persist the structured transcript after each agent step, so anyone reading the log
+        file while the debate runs (the gateway's /status) sees the current state."""
+        self._save_transcript()
+
     def _save_transcript(self):
         self.logger.debate_log["transcript"] = self.transcript.to_dict()
         self.logger.debate_log["metadata"]["total_tokens"] = self.total_tokens_used
+        self.logger.debate_log["metadata"]["token_limit"] = self.TOKEN_LIMIT
         self.logger._save_log()
 
     def _load_agent_cards(self) -> Dict:
@@ -135,6 +141,7 @@ class DebateCoordinator:
                 return self._finish(0, "NO_VERDICT", "INSUFFICIENT_EVIDENCE", detail)
 
             self.transcript.rounds_started = 1
+            self._checkpoint()
             self.logger.log_round_start(1)
             self._run_round_1(charlie_filing_type, fetched)
 
@@ -146,10 +153,12 @@ class DebateCoordinator:
 
             if rounds >= 2:
                 self.transcript.rounds_started = 2
+                self._checkpoint()
                 self.logger.log_round_start(2)
                 self._run_round_2()
             if rounds >= 3:
                 self.transcript.rounds_started = 3
+                self._checkpoint()
                 self.logger.log_round_start(3)
                 self._run_round_3()
             return self._finish(rounds, "COMPLETED")
@@ -248,6 +257,7 @@ class DebateCoordinator:
             return
         self.transcript.add_round1(name, result["output"], result["evidence"])
         self.warnings.extend(f"{name}: {w}" for w in result.get("warnings", []))
+        self._checkpoint()
         self.logger.log_agent_response(
             round_number=1,
             agent_name=name,
@@ -292,6 +302,7 @@ class DebateCoordinator:
                 self.warnings.append(f"{name} dropped after round 1: {why}")
                 self.logger.log_system_message(f"Circuit breaker: {name} dropped, {why}")
         self.logger.log_verification(1, report)
+        self._checkpoint()
 
         remaining = self.transcript.participants()
         if len(remaining) >= cb.min_valid_agents:
@@ -322,6 +333,7 @@ class DebateCoordinator:
                 continue
             out = result.output
             t.add_round2(name, out)
+            self._checkpoint()
             self.logger.log_agent_response(
                 round_number=2,
                 agent_name=name,
@@ -355,6 +367,7 @@ class DebateCoordinator:
                 continue
             out = result.output
             t.add_round3(name, out)
+            self._checkpoint()
             self.logger.log_agent_response(
                 round_number=3,
                 agent_name=name,

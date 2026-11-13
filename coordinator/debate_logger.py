@@ -211,6 +211,17 @@ class DebateLogger:
         print(f"Result: {result}\n")
         self._save_log()
     
+    def log_verification(self, round_number: int, report: Dict[str, Any]):
+        """Store the claim-by-claim verification report for a round (FIXES.md C4)."""
+        round_idx = round_number - 1
+        if round_idx >= len(self.debate_log["rounds"]):
+            return
+        self.debate_log["rounds"][round_idx]["verification"] = report
+        for agent, v in report.items():
+            print(f"[VERIFIER] {agent}: {v['verified']}/{v['checkable']} checkable claims verified "
+                  f"(faithfulness {v['faithfulness']:.2f})")
+        self._save_log()
+
     def log_cross_critique(
         self,
         round_number: int,

@@ -1,0 +1,42 @@
+# Kai decision thresholds and judge constants (DESIGN.md §4-§5, PHASE4_PLAN.md §3).
+# Edit by hand; values are validated at load time. Override the path with KAI_THRESHOLDS_PATH.
+
+# Persona applies ONLY here, to the judge's decision. Agents and valuation inputs never see it.
+#   buy_score / sell_score   : debate score S (from -1 to +1) needed for Buy / Sell
+#   min_margin_of_safety     : DCF margin of safety needed for Buy (0.25 = 25%)
+#   max_volatility           : annualised volatility allowed for Buy (null = no limit)
+#   buy_requires_dcf         : if true, Buy is impossible when no DCF could be computed
+personas:
+  zen:      {buy_score: 0.50, min_margin_of_safety: 0.25, max_volatility: 0.35, sell_score: -0.20, buy_requires_dcf: true}
+  balanced: {buy_score: 0.35, min_margin_of_safety: 0.15, max_volatility: 0.50, sell_score: -0.30, buy_requires_dcf: true}
+  alpha:    {buy_score: 0.25, min_margin_of_safety: 0.00, max_volatility: null, sell_score: -0.40, buy_requires_dcf: false}
+
+# Claim verification (faithfulness)
+verification:
+  numeric_tolerance: 0.01      # relative tolerance when recomputing a numeric claim
+  min_checkable_claims: 3      # faithfulness denominator floor
+  min_quote_chars: 15          # shortest quote accepted as evidence
+
+circuit_breaker:
+  min_agent_faithfulness: 0.60 # agents below this after round 1 are dropped
+  min_valid_agents: 2          # fewer valid agents -> NO_VERDICT
+  token_limit: 50000           # all LLM calls in all rounds
+
+integrity:
+  unexplained_stance_penalty: 0.25
+  retained_failed_claim_penalty: 0.50
+
+# Discount rate = risk-free + beta x equity risk premium, the same for every persona
+capm:
+  equity_risk_premium: 0.05
+  beta_clamp: [0.5, 2.0]
+  rate_clamp: [0.06, 0.15]
+  fallback_rate: 0.10          # used, with a warning, when beta or the risk-free rate is unavailable
+  terminal_growth: 0.025
+
+hitl:
+  approval_confidence: 60      # Buy/Sell at or above this confidence needs human approval
+  # Buy/Sell below approval_confidence: "warn" = explicit low-confidence warning notification,
+  # "approve" = also needs human approval. Never delivered as a plain success notification.
+  low_confidence_action: warn
+  approval_timeout_minutes: 5

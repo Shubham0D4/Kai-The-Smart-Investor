@@ -3,7 +3,7 @@ Deterministic financial calculation utilities.
 Provides pure Python functions for financial metrics used by Gamma agent.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence, Tuple
 from datetime import datetime
 
 
@@ -191,6 +191,58 @@ def calculate_sharpe_ratio(
     sharpe = (annualized_return - risk_free_rate) / annualized_volatility
     
     return round(sharpe, 2)
+
+
+def calculate_beta(
+    stock: Sequence[Tuple[str, float]],
+    benchmark: Sequence[Tuple[str, float]],
+    min_days: int = 60
+) -> Optional[float]:
+    """
+    Beta of a stock against a benchmark: cov(r_stock, r_bench) / var(r_bench), using daily
+    returns between consecutive dates present in both series.
+
+    Args:
+        stock, benchmark: (date, close) pairs, any order
+        min_days: minimum number of common dates; fewer returns None
+
+    Returns:
+        Beta, or None when there is too little overlapping data or no benchmark variance
+    """
+    s, b = dict(stock), dict(benchmark)
+    dates = sorted(set(s) & set(b))
+    if len(dates) < min_days:
+        return None
+    rs, rb = [], []
+    for prev, cur in zip(dates, dates[1:]):
+        if s[prev] and b[prev]:
+            rs.append(s[cur] / s[prev] - 1)
+            rb.append(b[cur] / b[prev] - 1)
+    n = len(rb)
+    if n < 2:
+        return None
+    ms, mb = sum(rs) / n, sum(rb) / n
+    var_b = sum((x - mb) ** 2 for x in rb) / n
+    if var_b < 1e-18:
+        return None
+    cov = sum((x - ms) * (y - mb) for x, y in zip(rs, rb)) / n
+    return round(cov / var_b, 6)
+
+
+def capm_discount_rate(
+    risk_free: float,
+    beta: float,
+    equity_risk_premium: float,
+    beta_clamp: Tuple[float, float],
+    rate_clamp: Tuple[float, float]
+) -> float:
+    """
+    CAPM cost of equity: clamp(risk_free + clamp(beta) x equity_risk_premium).
+    The same rate is used for every persona (FIXES.md C7).
+    """
+    b = min(max(beta, beta_clamp[0]), beta_clamp[1])
+    rate = risk_free + b * equity_risk_premium
+    return round(min(max(rate, rate_clamp[0]), rate_clamp[1]), 6)
 
 
 # MCP Tool Functions (wrapped for MCP exposure)

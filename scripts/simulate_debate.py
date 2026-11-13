@@ -47,13 +47,8 @@ def main():
     # 2. Run Debate
     print(f"\n[STEP 2] Orchestrating {args.rounds}-round A2A Debate...")
     
-    # Map persona
-    persona_map = {
-        "zen": RiskPersona.ZEN,
-        "alpha": RiskPersona.ALPHA,
-        "balanced": RiskPersona.SIGMA
-    }
-    persona = persona_map.get(args.persona, RiskPersona.ALPHA)
+    # Persona selects the judge's decision thresholds only
+    persona = RiskPersona(args.persona)
     
     coordinator = DebateCoordinator(args.ticker, persona)
     
@@ -89,7 +84,7 @@ def main():
     # 4. Generate & Verify Alpha Packet
     print("\n[STEP 4] Synthesizing Alpha Packet (Trust Artifact)...")
     sigma = SigmaAgent()
-    evaluation = sigma.evaluate_debate(log_file)
+    evaluation = sigma.evaluate_debate(log_file, persona=args.persona)
     
     alpha_packet = ap2.generate_alpha_packet(
         mandate=mandate,
@@ -97,7 +92,9 @@ def main():
         debate_log_path=log_file
     )
     
-    print(f"Recommendation: {alpha_packet['recommendation']} ({alpha_packet['confidence']}%)")
+    conf = alpha_packet['confidence']
+    print(f"Recommendation: {alpha_packet['recommendation']} "
+          f"({f'{conf:.0f}%' if conf is not None else 'no confidence'})")
     
     # Verify Alpha Packet Signature
     if ap2.verify_alpha_packet(alpha_packet):

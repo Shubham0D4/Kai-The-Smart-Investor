@@ -6,12 +6,12 @@
       DCF and risk metrics never run (coordinator passes no cash flows or price history).
 - [x] C3 Rounds 2 and 3 are fresh LLM calls with no history. Round 2 gets a
       300-char truncation; round 3 gets no debate content at all.
-- [ ] C4 Faithfulness only checks that grounding_sources is non-empty, and the
+- [x] C4 Faithfulness only checks that grounding_sources is non-empty, and the
       coordinator hardcodes those strings. Circuit breaker cannot trip.
-- [ ] C5 Consistency is keyword counting and penalises changing position.
-- [ ] C6 Verdict is a substring match on "buy"/"sell"; confidence is the mean of
+- [x] C5 Consistency is keyword counting and penalises changing position.
+- [x] C6 Verdict is a substring match on "buy"/"sell"; confidence is the mean of
       C4 and C5; key_risks parsing is broken.
-- [ ] C7 Persona changes the discount rate (facts) instead of decision thresholds.
+- [x] C7 Persona changes the discount rate (facts) instead of decision thresholds.
 - [ ] C8 A2A / MCP / ADK are claimed but not implemented; agents import tools directly.
 
 ## Bugs and security
@@ -98,3 +98,36 @@
   that grounding_sources is non-empty, so it still cannot trip in practice.
 - Found: when the token limit is hit the coordinator raises; the gateway marks the session
   FAILED rather than returning a partial result. Consider a NO_VERDICT result instead.
+
+## Phase 4 (branch phase-4-judge) notes
+Implemented per PHASE4_PLAN.md: config/thresholds.yaml + coordinator/config.py,
+judge/verifier.py (C4), judge/scoring.py (C5, C6), Sigma rewrite, persona-free agents with a
+CAPM discount rate (C7), circuit breaker that can trip, NO_VERDICT outcomes, gateway/AP2/HITL
+updated. Tests: test_verifier (V1-V15), test_scoring (I1-I6, S1-S3, G1-G9, R1),
+test_config, test_capm, test_hitl, test_judge (J1-J12).
+
+Deviations from PHASE4_PLAN.md:
+- HITL: `hitl.low_confidence` replaced by `hitl.low_confidence_action` ("warn" | "approve").
+  Buy/Sell below 60 is never a plain notification: default is an explicit low-confidence
+  warning; "approve" makes it need approval too. Buy/Sell with no confidence needs approval.
+- Sigma's validated output adds `supporting_points` (verified claims of the agents whose stance
+  matches the verdict), requested for phase 4 but not in the plan.
+- `write_narrative` also receives the supporting points and risks and returns
+  (text, warning) so a failed LLM call is reported, not hidden.
+- `decide_verdict` takes an extra `warnings` list; `AgentVerification` stores its
+  `denominator`; `Transcript` has `rounds_started` (so a debate that never reached round 3
+  scores integrity 1, as in I5) and `final_outputs()`.
+- Verifier: wording numbers may also match within the rounding implied by how they are
+  written ("$0.5 trillion" = +/-0.05tn); quote claims may use numbers that appear in the cited
+  article; zero denominators fail with reason `bad_operation`.
+- Integrity counts every round-1 claim that failed verification, including inferences that
+  fail because they rest on a false number.
+- `INSUFFICIENT_AGENTS` kept as a NO_VERDICT reason when LLM failures (not faithfulness drops)
+  leave fewer than two agents after round 1.
+
+Still open / found:
+- B8: kai-frontend/src/App.jsx still fills faithfulness/consistency with Math.random().
+  SigmaCard/CommitteeContext now read `integrity`, show "-" for a missing confidence and a
+  warnings banner; the frontend was not built or run (no node_modules here).
+- Existing alpha_packets/*.json use the old schema and the burned key.
+- The wording check only sees numbers with a $, %, x or scale marker.

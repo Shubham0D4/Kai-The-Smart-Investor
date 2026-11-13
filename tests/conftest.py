@@ -83,7 +83,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 FIXTURE_NOW = datetime(2026, 11, 13, 12, 0, tzinfo=timezone.utc)
 
 # Data sources a test can switch off: "sec", "sec_facts", "yahoo_rss", "nasdaq_rss",
-# "google_rss", "yfinance". See the failing_sources fixture.
+# "google_rss", "yfinance", "benchmark" (^GSPC), "risk_free" (^TNX). See failing_sources.
 FAILING = set()
 
 
@@ -144,6 +144,8 @@ class _FakeYFTicker:
     def __init__(self, symbol, data):
         if "yfinance" in FAILING:
             raise ConnectionError("yfinance unavailable (simulated)")
+        if (symbol == "^GSPC" and "benchmark" in FAILING) or (symbol == "^TNX" and "risk_free" in FAILING):
+            raise ConnectionError(f"{symbol} unavailable (simulated)")
         self.symbol = symbol
         self._data = data
         q = data["quote"].get(symbol)
@@ -211,31 +213,63 @@ def fake_llm():
 
 _EVIDENCE_LINE = re.compile(r"^\[([^\]]+)\]", re.MULTILINE)
 _AGENT_IN_PROMPT = re.compile(r'"agent": "(charlie|delta|gamma)", "round": (\d)')
+_VALUE_AT_END = re.compile(r": (-?[\d,]+(?:\.\d+)?(?:e[-+]?\d+)?)(?: (\S+))?(?: \([^)]*\))?$")
 
 
-def valid_output_for(prompt: str) -> str:
-    """A schema-valid reply that cites the first evidence ids listed in the prompt."""
+def evidence_entries(text: str):
+    """Parse evidence lines as rendered by agents.schema.format_evidence:
+    '[id] label: VALUE UNIT (period) | source: ...' plus an optional '    summary: ...' line."""
+    lines = text.splitlines()
+    out = []
+    for i, line in enumerate(lines):
+        m = re.match(r"^\[([^\]]+)\] (.*)$", line)
+        if not m:
+            continue
+        eid, rest = m.groups()
+        head = rest.split(" | source:", 1)[0]
+        vm = _VALUE_AT_END.search(head)
+        summary = None
+        if i + 1 < len(lines) and lines[i + 1].startswith("    summary: "):
+            summary = lines[i + 1][len("    summary: "):]
+        title = None if vm else re.sub(r" \(\d{4}-[^)]*\)$", "", head).replace(" [headline only]", "")
+        out.append({"id": eid, "value": float(vm.group(1).replace(",", "")) if vm else None,
+                    "unit": (vm.group(2) if vm else None) or "units", "title": title, "summary": summary})
+    return out
+
+
+def true_claims(entries, n=3):
+    """n checkable claims that are TRUE against the evidence shown (they pass verification)."""
+    claims = []
+    for e in entries:
+        if len(claims) == n:
+            break
+        cid = f"C{len(claims) + 1}"
+        if e["value"] is not None:
+            claims.append({"id": cid, "kind": "numeric", "text": f"Value of {e['id']}", "value": e["value"],
+                           "unit": e["unit"], "op": "equals", "evidence": [e["id"]]})
+        elif e["title"] or e["summary"]:
+            claims.append({"id": cid, "kind": "quote", "text": "Coverage point",
+                           "quote": (e["summary"] or e["title"])[:40].strip(), "evidence": [e["id"]]})
+    claims.append({"id": f"C{len(claims) + 1}", "kind": "inference", "text": "Overall view",
+                   "based_on": [c["id"] for c in claims]})
+    return claims
+
+
+def _section(prompt: str, heading: str) -> str:
+    return prompt.split(heading, 1)[1].split("\n## ", 1)[0]
+
+
+def valid_output_for(prompt: str, stance: str = "neutral", confidence: float = 55) -> str:
+    """A schema-valid round-1 reply with three true claims from the evidence in the prompt."""
     m = _AGENT_IN_PROMPT.search(prompt)
     agent, rnd = m.group(1), int(m.group(2))
-    ids = _EVIDENCE_LINE.findall(prompt)[:3]
-    claims = []
-    for n, eid in enumerate(ids, start=1):
-        if eid.startswith("news:"):
-            claims.append({"id": f"C{n}", "kind": "quote", "text": "Coverage point",
-                           "quote": "placeholder quote", "evidence": [eid]})
-        else:
-            claims.append({"id": f"C{n}", "kind": "numeric", "text": f"Value of {eid}",
-                           "value": 1.0, "unit": "USD", "op": "equals", "evidence": [eid]})
-    claims.append({"id": f"C{len(ids) + 1}", "kind": "inference", "text": "Overall view",
-                   "based_on": [c["id"] for c in claims]})
-    return json.dumps({"agent": agent, "round": rnd, "stance": "neutral", "confidence": 55,
-                       "claims": claims, "risks": ["canned risk"]})
+    return json.dumps({"agent": agent, "round": rnd, "stance": stance, "confidence": confidence,
+                       "claims": true_claims(evidence_entries(prompt)), "risks": ["canned risk"]})
 
 
 def _section_ids(prompt: str, heading: str):
     """Evidence ids listed under a '## <heading>' section of a round 2/3 prompt."""
-    body = prompt.split(heading, 1)[1].split("\n## ", 1)[0]
-    return _EVIDENCE_LINE.findall(body)
+    return _EVIDENCE_LINE.findall(_section(prompt, heading))
 
 
 def valid_round2_for(prompt: str) -> str:
@@ -254,18 +288,22 @@ def valid_round2_for(prompt: str) -> str:
 def valid_round3_for(prompt: str) -> str:
     agent = re.search(r"You are (charlie|delta|gamma)\.", prompt).group(1)
     stance = re.search(r"Your round-1 stance: (\w+)", prompt).group(1)
-    own = _section_ids(prompt, "## Your evidence")
+    confidence = json.loads(_section(prompt, "## Your round-1 output (full)").split("\nYour round-1 stance")[0]
+                            .strip())["confidence"]
     received = re.findall(r"^- ((?:charlie|delta|gamma)\.K\d+) \(\w+, targets \w+\.(\w+)\)", prompt, re.M)
-    by_claim = {}
+    failed = re.search(r"Your claims that FAILED verification: (.*)", prompt).group(1)
+    changes = {}
     for ref, claim in received:
-        by_claim.setdefault(claim, []).append(ref)
-    changes = [{"claim": c, "action": "kept", "reason": "evidence unchanged", "in_response_to": refs}
-               for c, refs in by_claim.items()]
-    claims = [{"id": "C1", "kind": "numeric", "text": f"Value of {own[0]}", "value": 1.0, "unit": "USD",
-               "op": "equals", "evidence": [own[0]]},
-              {"id": "C2", "kind": "inference", "text": "Final view", "based_on": ["C1"]}]
-    return json.dumps({"agent": agent, "round": 3, "stance": stance, "confidence": 60,
-                       "claims": claims, "risks": ["canned risk"], "changes": changes,
+        changes.setdefault(claim, {"claim": claim, "action": "kept", "reason": "evidence unchanged",
+                                   "in_response_to": []})["in_response_to"].append(ref)
+    if failed != "none":
+        for claim in failed.split(", "):
+            ch = changes.setdefault(claim, {"claim": claim, "action": "kept", "reason": "",
+                                            "in_response_to": []})
+            ch.update(action="withdrawn", reason="failed verification against the data")
+    claims = true_claims(evidence_entries(_section(prompt, "## Your evidence")))
+    return json.dumps({"agent": agent, "round": 3, "stance": stance, "confidence": confidence,
+                       "claims": claims, "risks": ["canned risk"], "changes": list(changes.values()),
                        "changed_by": [], "stance_change": {"from": stance, "to": stance, "reason": ""}})
 
 
@@ -277,6 +315,29 @@ def _schema_responder(prompt: str) -> str:
     if "Return ONLY a JSON object" in prompt:
         return valid_output_for(prompt)
     return "Canned text."
+
+
+@pytest.fixture
+def make_responder():
+    """Factory for fake-LLM responders that answer all three rounds with valid JSON.
+
+    stance/confidence: round-1 stance and confidence (round 3 keeps them)
+    round1_hook(prompt, reply_json) / round3_hook(prompt, reply_json): return a modified reply,
+    e.g. to plant a number that is not in the fetched data.
+    """
+    def factory(stance="neutral", confidence=55, round1_hook=None, round3_hook=None):
+        def respond(prompt):
+            if "ROUND 2 - CROSS-EXAMINATION" in prompt:
+                return valid_round2_for(prompt)
+            if "ROUND 3 - FINAL POSITION" in prompt:
+                out = valid_round3_for(prompt)
+                return round3_hook(prompt, out) if round3_hook else out
+            if "Return ONLY a JSON object" in prompt:
+                out = valid_output_for(prompt, stance, confidence)
+                return round1_hook(prompt, out) if round1_hook else out
+            return "Canned text."
+        return respond
+    return factory
 
 
 @pytest.fixture

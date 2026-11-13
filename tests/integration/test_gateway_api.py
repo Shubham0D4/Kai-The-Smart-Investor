@@ -121,7 +121,7 @@ def test_hitl_approval_flow(client, db_session):
         "alpha_packet": {
             "packet_id": "p1", "mandate_id": "m1", "ticker": "AAA", "persona": "zen",
             "recommendation": "Buy", "confidence": 90.0,
-            "quality_scores": {"faithfulness": 90.0, "consistency": 90.0, "overall": 90.0},
+            "quality_scores": {"faithfulness": 90.0, "integrity": 90.0, "overall": 90.0},
             "debate_summary": {"rounds": 2, "agents": ["charlie"], "quality": 90.0},
             "key_risks": [], "debate_log": "log.json", "timestamp": "now",
             "signature": "sig", "public_key": "pk", "verification_url": "http://x",

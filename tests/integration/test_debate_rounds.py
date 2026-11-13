@@ -28,7 +28,7 @@ def run(schema_llm):
     files = []
 
     def _run(rounds=3, llm=schema_llm, token_limit=None):
-        coord = DebateCoordinator("AAPL", RiskPersona.SIGMA, llm_client=llm)
+        coord = DebateCoordinator("AAPL", RiskPersona.BALANCED, llm_client=llm)
         if token_limit is not None:
             coord.TOKEN_LIMIT = token_limit
         files.append(coord.logger)
@@ -137,40 +137,54 @@ def test_every_llm_call_in_every_round_is_counted_including_retries(run, schema_
         assert json.load(f)["metadata"]["total_tokens"] == llm.total
 
 
-def test_token_limit_enforced_after_round_1(run, schema_llm):
+def test_token_limit_after_round_1_returns_no_verdict(run, schema_llm):
+    # PHASE4_PLAN J6: the limit is still enforced in later rounds, but ends the debate with
+    # NO_VERDICT instead of raising
     coord, _ = run(rounds=1)
     round1_tokens = coord.total_tokens_used
-    with pytest.raises(Exception, match="HARD LIMIT EXCEEDED"):
-        run(rounds=3, llm=FakeLLMClient(responses=schema_llm.responses), token_limit=round1_tokens + 1)
+    coord, result = run(rounds=3, llm=FakeLLMClient(responses=schema_llm.responses),
+                        token_limit=round1_tokens + 1)
+    assert result["status"] == "NO_VERDICT" and result["reason"] == "TOKEN_LIMIT"
+    assert "HARD LIMIT EXCEEDED" in result["detail"]
+    assert coord.transcript.rounds_started == 2 and not coord.transcript.round3
 
 
-def test_circuit_breaker_scores_without_llm_synthesis(run, schema_llm, monkeypatch):
+def test_no_sigma_llm_call_during_the_debate(run, schema_llm, monkeypatch):
     def boom(*a, **k):
-        raise AssertionError("Sigma LLM synthesis must not run during the debate")
-    monkeypatch.setattr(SigmaAgent, "synthesize_recommendation", boom)
+        raise AssertionError("Sigma's narrative must not run during the debate")
+    monkeypatch.setattr(SigmaAgent, "write_narrative", boom)
 
     coord, result = run(rounds=3)
     assert result["rounds_completed"] == 3
-    assert not any("You are evaluating a completed investment debate" in p for p in schema_llm.calls)
+    assert not any("Explain this investment committee verdict" in p for p in schema_llm.calls)
 
 
-def test_fewer_than_two_agents_stops_after_round_1(run, schema_llm, failing_sources):
+def test_fewer_than_two_agents_with_data_stops_before_round_1(run, schema_llm, failing_sources):
     failing_sources.update({"sec_facts", "yfinance"})      # Charlie and Gamma lose their data
     coord, result = run(rounds=3)
-    assert result["status"] == "TERMINATED_EARLY"
-    assert result["reason"] == "INSUFFICIENT_AGENTS"
-    assert result["rounds_completed"] == 1
-    assert not any("ROUND 2" in p for p in schema_llm.calls)
+    assert result["status"] == "NO_VERDICT"
+    assert result["reason"] == "INSUFFICIENT_EVIDENCE"
+    assert result["rounds_completed"] == 0
+    assert schema_llm.calls == []
 
 
 # ------------------------------------------------------------------ transcript validation
 
+EVIDENCE = {
+    "charlie": [{"id": "sec:revenue:FY2026", "label": "Revenue FY2026", "value": 100.0, "unit": "USD",
+                 "source": "test"}],
+    "delta": [{"id": "news:1", "label": "Apple shares climb after strong quarter", "source": "test",
+               "text": "Apple shares rose after the company reported a strong quarter."}],
+}
+
+
 def _transcript(make_valid_output):
+    from agents.schema import format_evidence, EvidenceRecord
     t = Transcript("AAPL")
-    for agent, ev in (("charlie", "sec:revenue:FY2026"), ("delta", "news:1")):
-        prompt = f'"agent": "{agent}", "round": 1\n[{ev}] x\n'
-        t.add_round1(agent, json.loads(make_valid_output(prompt)),
-                     [{"id": ev, "label": "x", "source": "test"}])
+    for agent, ev in EVIDENCE.items():
+        records = [EvidenceRecord(**e) for e in ev]
+        prompt = f'"agent": "{agent}", "round": 1\n{format_evidence(records)}\n'
+        t.add_round1(agent, json.loads(make_valid_output(prompt)), ev)
     return t
 
 

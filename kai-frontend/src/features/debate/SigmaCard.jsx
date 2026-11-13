@@ -9,12 +9,15 @@ const SigmaCard = () => {
 
     if (!finalReport) return null;
 
-    const { signal, confidence, scores, summary, ticker } = finalReport;
-    const safeScores = scores || { faithfulness: 0, consistency: 0 };
+    const { confidence, summary, ticker, agentsMissing = [], warnings = [], reason } = finalReport;
+    const scores = finalReport.scores || { faithfulness: 0, integrity: 0 };
+    // Backend sends "Buy" / "Hold" / "Sell" / "No Verdict"; confidence is null for Hold and No Verdict
+    const signal = (finalReport.signal || '').toUpperCase();
+    const hasConfidence = confidence !== null && confidence !== undefined;
 
     // Dynamic Styling Logic
-    const isStrongBuy = signal === 'BUY' && confidence > 80;
-    const isStrongSell = signal === 'SELL' && confidence > 80;
+    const isStrongBuy = signal === 'BUY' && hasConfidence && confidence >= 60;
+    const isStrongSell = signal === 'SELL' && hasConfidence && confidence >= 60;
 
     // Simulated Live Market Data
     const [currentPrice, setCurrentPrice] = React.useState(null);
@@ -94,8 +97,8 @@ const SigmaCard = () => {
                                     {signalIcon} {signal}
                                 </div>
                                 <div className="mt-auto">
-                                    <Badge bg={confidence > 75 ? 'success' : 'warning'} pill className="px-4 py-2 fs-6 opacity-90 shadow-sm fw-medium">
-                                        {confidence}% Confidence
+                                    <Badge bg={hasConfidence && confidence >= 60 ? 'success' : 'warning'} pill className="px-4 py-2 fs-6 opacity-90 shadow-sm fw-medium">
+                                        {hasConfidence ? `${confidence}% Confidence` : '— Confidence'}
                                     </Badge>
                                 </div>
                             </div>
@@ -143,12 +146,12 @@ const SigmaCard = () => {
 
                                 <div className="text-start">
                                     <div className="d-flex justify-content-between mb-2">
-                                        <span className="small fw-semibold text-secondary">Logical Consistency</span>
-                                        <span className="fw-bold text-gradient">{scores.consistency}%</span>
+                                        <span className="small fw-semibold text-secondary">Debate Integrity</span>
+                                        <span className="fw-bold text-gradient">{scores.integrity}%</span>
                                     </div>
                                     <ProgressBar
-                                        now={scores.consistency}
-                                        variant={scores.consistency > 80 ? "info" : "warning"}
+                                        now={scores.integrity}
+                                        variant={scores.integrity > 80 ? "info" : "warning"}
                                         style={{ height: '10px', borderRadius: '5px' }}
                                         className="bg-light shadow-inner"
                                     />
@@ -157,6 +160,20 @@ const SigmaCard = () => {
                         </Col>
                     </Row>
                 </Card.Body>
+
+                {(agentsMissing.length > 0 || warnings.length > 0 || reason) && (
+                    <div className="alert alert-warning m-0 rounded-0 small" role="alert">
+                        {reason && <div className="fw-bold">No verdict: {reason}</div>}
+                        {agentsMissing.length > 0 && (
+                            <div className="fw-semibold">Verdict based on fewer agents. Missing: {agentsMissing.join(', ')}</div>
+                        )}
+                        {warnings.length > 0 && (
+                            <ul className="mb-0 ps-3">
+                                {warnings.map((w, i) => <li key={i}>{w}</li>)}
+                            </ul>
+                        )}
+                    </div>
+                )}
 
                 <div className="p-4" style={{ backgroundColor: 'var(--bg-primary)', borderTop: '1px solid var(--border)' }}>
                     <h6 className="fw-bold mb-2 d-flex align-items-center gap-2" style={{ color: 'var(--text-primary)' }}>

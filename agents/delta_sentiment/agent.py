@@ -7,12 +7,12 @@ argues from that text only.
 import os
 import sys
 import argparse
-from typing import Dict
+from typing import Dict, Optional
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from coordinator.personas import RiskPersona, get_delta_system_instruction
+from coordinator.personas import get_delta_system_instruction
 from mcp_server.tools.news_stream import get_news_stream
 from agents.schema import (
     EvidenceRecord, agent_error, format_evidence, generate_agent_output,
@@ -46,42 +46,45 @@ class DeltaAgent:
     Analyzes news sentiment and narratives from article summaries.
     """
 
-    def __init__(self, persona: RiskPersona = RiskPersona.ALPHA, llm_client=None):
+    def __init__(self, llm_client=None):
         """
-        Initialize Delta agent.
+        Initialize Delta agent. Persona-free: the same analysis for every user (C7).
 
         Args:
-            persona: Risk persona to apply (Zen or Alpha)
             llm_client: Optional LLM client (same interface as MultiLLMClient);
                         defaults to a real MultiLLMClient.
         """
-        self.persona = persona
         self.name = "Delta"
         self.role = "Sentiment Analysis Specialist"
 
-        system_instruction = get_delta_system_instruction(persona)
+        system_instruction = get_delta_system_instruction()
         self.model = llm_client if llm_client is not None else MultiLLMClient(system_instruction=system_instruction)
 
-    def analyze(self, ticker: str, days: int = 7, max_articles: int = 15) -> Dict:
+    def analyze(self, ticker: str, days: int = 7, max_articles: int = 15,
+                news: Optional[Dict] = None) -> Dict:
         """
         Perform sentiment analysis on a ticker.
+
+        Args:
+            news: Pre-fetched get_news_stream result (the coordinator fetches all data before
+                  any LLM call); fetched here when None.
 
         Returns a result dict with the validated output, or an explicit error. No LLM call
         is made when no news could be fetched.
         """
-        persona = self.persona.value
-        print(f"[Delta] Fetching news for {ticker} (last {days} days)...")
-        news = get_news_stream(ticker, days=days, max_articles=max_articles)
+        if news is None:
+            print(f"[Delta] Fetching news for {ticker} (last {days} days)...")
+            news = get_news_stream(ticker, days=days, max_articles=max_articles)
 
         if not news.get("success"):
             detail = news.get("error", "news unavailable")
             if news.get("providers_failed"):
                 detail += f" ({'; '.join(f'{p}: {m}' for p, m in news['providers_failed'].items())})"
-            return agent_error("delta", ticker, persona, detail, "data_source")
+            return agent_error("delta", ticker, detail, "data_source")
 
         articles = news.get("articles", [])
         if not articles:
-            return agent_error("delta", ticker, persona,
+            return agent_error("delta", ticker,
                                f"no news articles found for {ticker} in the last {days} days", "data_source")
 
         evidence = [_article_evidence(a) for a in articles]
@@ -98,20 +101,19 @@ risk signals. State your sentiment stance. Use quote claims for points taken fro
 
 {schema_instructions('delta', 1)}
 """
-        print(f"[Delta] Analyzing sentiment for {ticker} with {persona} persona...")
+        print(f"[Delta] Analyzing sentiment for {ticker}...")
         result = generate_agent_output(
             self.model, prompt, agent="delta", round_number=1,
             evidence_ids=[e.id for e in evidence],
         )
         if not result.ok:
-            return agent_error("delta", ticker, persona, result.error, result.error_type,
+            return agent_error("delta", ticker, result.error, result.error_type,
                                token_usage=result.token_usage, attempts=result.attempts)
 
         return {
             "agent": self.name,
             "role": self.role,
             "ticker": ticker,
-            "persona": persona,
             "news_analyzed": {
                 "article_count": len(articles),
                 "headline_only_count": sum(a["headline_only"] for a in articles),
@@ -148,13 +150,11 @@ def main():
     """Main entry point for testing Delta agent."""
     parser = argparse.ArgumentParser(description="Delta - Sentiment Analysis Agent")
     parser.add_argument("--ticker", type=str, required=True, help="Stock ticker symbol")
-    parser.add_argument("--persona", type=str, default="alpha", choices=["zen", "alpha"], help="Risk persona")
     parser.add_argument("--days", type=int, default=7, help="Number of days to look back")
     parser.add_argument("--max-articles", type=int, default=15, help="Maximum articles to analyze")
     args = parser.parse_args()
 
-    persona = RiskPersona.ZEN if args.persona == "zen" else RiskPersona.ALPHA
-    result = DeltaAgent(persona=persona).analyze(args.ticker, args.days, args.max_articles)
+    result = DeltaAgent().analyze(args.ticker, args.days, args.max_articles)
 
     print("\n" + "=" * 80)
     print(f"DELTA'S SENTIMENT ANALYSIS - {args.ticker.upper()}")

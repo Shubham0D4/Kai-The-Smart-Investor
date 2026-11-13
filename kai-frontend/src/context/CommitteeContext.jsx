@@ -91,8 +91,11 @@ export const CommitteeProvider = ({ children }) => {
                             summary: ap.debate_summary?.consensus || "Analysis complete.",
                             scores: {
                                 faithfulness: ap.quality_scores?.faithfulness || 0,
-                                consistency: ap.quality_scores?.consistency || 0
-                            }
+                                integrity: ap.quality_scores?.integrity || 0
+                            },
+                            agentsMissing: ap.verdict_detail?.agents_missing || [],
+                            warnings: ap.verdict_detail?.warnings || [],
+                            reason: ap.verdict_detail?.reason || null
                         });
 
                         // Stop polling once completed

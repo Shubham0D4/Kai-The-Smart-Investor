@@ -12,7 +12,7 @@ from typing import Dict, Optional
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from coordinator.personas import RiskPersona, get_charlie_system_instruction
+from coordinator.personas import get_charlie_system_instruction
 from mcp_server.tools.sec_filings import fetch_filing_data
 from mcp_server.tools.sec_financials import fetch_financial_statements
 from agents.schema import (
@@ -35,20 +35,18 @@ class CharlieAgent:
     Analyzes revenue, margins, earnings, cash flow and balance sheet from SEC XBRL data.
     """
 
-    def __init__(self, persona: RiskPersona = RiskPersona.ZEN, llm_client=None):
+    def __init__(self, llm_client=None):
         """
-        Initialize Charlie agent.
+        Initialize Charlie agent. Persona-free: the same analysis for every user (C7).
 
         Args:
-            persona: Risk persona to apply (Zen or Alpha)
             llm_client: Optional LLM client (same interface as MultiLLMClient);
                         defaults to a real MultiLLMClient.
         """
-        self.persona = persona
         self.name = "Charlie"
         self.role = "Fundamental Analysis Specialist"
 
-        system_instruction = get_charlie_system_instruction(persona)
+        system_instruction = get_charlie_system_instruction()
         self.model = llm_client if llm_client is not None else MultiLLMClient(system_instruction=system_instruction)
 
     def analyze(self, ticker: str, filing_type: str = "10-K", financials: Optional[Dict] = None) -> Dict:
@@ -65,12 +63,11 @@ class CharlieAgent:
             Result dict with the validated output, or an explicit error. No LLM call is
             made when the financial data is unavailable.
         """
-        persona = self.persona.value
         print(f"[Charlie] Fetching SEC financial statements for {ticker}...")
         if financials is None:
             financials = fetch_financial_statements(ticker)
         if not financials.get("success"):
-            return agent_error("charlie", ticker, persona,
+            return agent_error("charlie", ticker,
                                financials.get("error", "SEC financial data unavailable"), "data_source")
 
         evidence = [EvidenceRecord(**r) for r in financials["records"]]
@@ -99,20 +96,19 @@ strength. State your fundamental stance.
 
 {schema_instructions('charlie', 1)}
 """
-        print(f"[Charlie] Analyzing {ticker} with {persona} persona...")
+        print(f"[Charlie] Analyzing {ticker}...")
         result = generate_agent_output(
             self.model, prompt, agent="charlie", round_number=1,
             evidence_ids=[e.id for e in evidence],
         )
         if not result.ok:
-            return agent_error("charlie", ticker, persona, result.error, result.error_type,
+            return agent_error("charlie", ticker, result.error, result.error_type,
                                token_usage=result.token_usage, attempts=result.attempts)
 
         return {
             "agent": self.name,
             "role": self.role,
             "ticker": ticker,
-            "persona": persona,
             "company_name": company_name,
             "filing_analyzed": filing_ref,
             "output": result.output.model_dump(),
@@ -143,11 +139,9 @@ def main():
     """Main entry point for testing Charlie agent."""
     parser = argparse.ArgumentParser(description="Charlie - Fundamental Analysis Agent")
     parser.add_argument("--ticker", type=str, required=True, help="Stock ticker symbol")
-    parser.add_argument("--persona", type=str, default="zen", choices=["zen", "alpha"], help="Risk persona")
     args = parser.parse_args()
 
-    persona = RiskPersona.ZEN if args.persona == "zen" else RiskPersona.ALPHA
-    result = CharlieAgent(persona=persona).analyze(args.ticker)
+    result = CharlieAgent().analyze(args.ticker)
 
     print("\n" + "=" * 80)
     print(f"CHARLIE'S FUNDAMENTAL ANALYSIS - {args.ticker.upper()}")

@@ -197,15 +197,15 @@ class AP2Handler:
         # Extract key information
         recommendation = sigma_evaluation["final_recommendation"]["recommendation"]
         confidence = sigma_evaluation["final_recommendation"]["confidence"]
-        faithfulness = sigma_evaluation["evaluation"]["faithfulness_score"]
-        consistency = sigma_evaluation["evaluation"]["consistency_score"]
+        quality = sigma_evaluation["evaluation"]
+        final = sigma_evaluation["final_recommendation"]
         
         # Create debate summary
         debate_summary = self._create_debate_summary(sigma_evaluation)
         
-        # Extract key risks from analysis
-        analysis_text = sigma_evaluation["final_recommendation"]["analysis"]
-        key_risks = self._extract_risks(analysis_text)
+        # Risks come from the agents' own structured `risks` fields (via Sigma), not from
+        # scanning the narrative text for keywords.
+        key_risks = list(final.get("key_risks", []))
         
         alpha_packet = {
             "packet_id": packet_id,
@@ -215,12 +215,21 @@ class AP2Handler:
             "recommendation": recommendation,
             "confidence": confidence,
             "quality_scores": {
-                "faithfulness": faithfulness,
-                "consistency": consistency,
-                "overall": (faithfulness + consistency) / 2
+                "faithfulness": quality["faithfulness_score"],
+                "integrity": quality["integrity_score"],
+                "overall": quality["overall_quality"]
             },
             "debate_summary": debate_summary,
             "key_risks": key_risks,
+            "verdict_detail": {
+                "score": final.get("score"),
+                "gates": final.get("gates", []),
+                "supporting_points": final.get("supporting_points", []),
+                "agents_valid": final.get("agents_valid", []),
+                "agents_missing": final.get("agents_missing", []),
+                "warnings": final.get("warnings", []),
+                "reason": final.get("reason"),
+            },
             "debate_log": debate_log_path,
             "timestamp": timestamp,
             "version": "AP2-v1.0"
@@ -305,29 +314,6 @@ class AP2Handler:
             "quality": sigma_evaluation["evaluation"]["overall_quality"]
         }
     
-    def _extract_risks(self, analysis_text: str, max_risks: int = 3) -> List[str]:
-        """Extract key risks from analysis text."""
-        # Simple extraction - look for risk-related sentences
-        risks = []
-        
-        # Split into sentences
-        sentences = analysis_text.split('.')
-        
-        for sentence in sentences:
-            sentence_lower = sentence.lower()
-            if any(word in sentence_lower for word in ['risk', 'concern', 'challenge', 'threat', 'caution']):
-                risk = sentence.strip()
-                if risk and len(risk) > 20:  # Meaningful risk
-                    risks.append(risk)
-                    if len(risks) >= max_risks:
-                        break
-        
-        # Default risks if none found
-        if not risks:
-            risks = ["Market volatility", "Regulatory changes", "Economic uncertainty"]
-        
-        return risks[:max_risks]
-    
     def save_alpha_packet(self, alpha_packet: Dict, output_dir: str = "alpha_packets") -> str:
         """
         Save Alpha Packet to file.
@@ -377,13 +363,14 @@ if __name__ == "__main__":
         "debate_id": "test_debate",
         "evaluation": {
             "faithfulness_score": 92.0,
-            "consistency_score": 88.0,
+            "integrity_score": 88.0,
             "overall_quality": 90.0
         },
         "final_recommendation": {
             "recommendation": "Buy",
             "confidence": 85.0,
-            "analysis": "Strong fundamentals with key risk of regulatory pressure."
+            "analysis": "Strong fundamentals.",
+            "key_risks": ["charlie: regulatory pressure"]
         },
         "metadata": {
             "rounds_evaluated": 3,

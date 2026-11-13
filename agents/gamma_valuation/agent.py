@@ -1,7 +1,8 @@
 """
 Gamma - Valuation Analysis Agent
-Fetches price, shares and a year of daily prices (yfinance) plus EPS, cash flows and debt
-(SEC XBRL), computes PE/PEG, a DCF and risk metrics in code, and argues from those numbers.
+Fetches price, shares and daily prices (yfinance) plus EPS, cash flows and debt (SEC XBRL),
+computes PE/PEG, a CAPM-discounted DCF and risk metrics in code, and argues from those numbers.
+The discount rate is the same for every persona (FIXES.md C7).
 """
 
 import math
@@ -13,9 +14,11 @@ from typing import Dict, List, Optional
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from coordinator.personas import RiskPersona, get_gamma_system_instruction
+from coordinator.config import Thresholds, load_thresholds
+from coordinator.personas import get_gamma_system_instruction
 from mcp_server.tools.finance_math import (
-    calculate_dcf_value, calculate_pe_ratio, calculate_peg_ratio, calculate_risk_metrics,
+    calculate_beta, calculate_dcf_value, calculate_pe_ratio, calculate_peg_ratio,
+    calculate_risk_metrics, capm_discount_rate,
 )
 from mcp_server.tools.market_data import fetch_market_data
 from mcp_server.tools.sec_financials import fetch_financial_statements, latest, series
@@ -55,42 +58,59 @@ class GammaAgent:
     Computes valuation and risk metrics deterministically; the LLM only interprets them.
     """
 
-    def __init__(self, persona: RiskPersona = RiskPersona.ZEN, llm_client=None):
+    def __init__(self, llm_client=None, thresholds: Optional[Thresholds] = None):
         """
-        Initialize Gamma agent.
+        Initialize Gamma agent. Persona-free: the same valuation for every user (C7).
 
         Args:
-            persona: Risk persona to apply (Zen or Alpha)
             llm_client: Optional LLM client (same interface as MultiLLMClient);
                         defaults to a real MultiLLMClient.
+            thresholds: Config (CAPM constants); defaults to config/thresholds.yaml.
         """
-        self.persona = persona
         self.name = "Gamma"
         self.role = "Valuation Analysis Specialist"
+        self.thresholds = thresholds
 
-        system_instruction = get_gamma_system_instruction(persona)
+        system_instruction = get_gamma_system_instruction()
         self.model = llm_client if llm_client is not None else MultiLLMClient(system_instruction=system_instruction)
 
-    def _assumptions(self):
-        # NOTE: persona still sets the discount rate here; that is FIXES.md C7 (a later phase).
-        if self.persona == RiskPersona.ZEN:
-            return 0.12, 0.025
-        if self.persona == RiskPersona.ALPHA:
-            return 0.08, 0.035
-        return 0.10, 0.03
+    def _discount_rate(self, market: Dict, evidence: List[Dict], warnings: List[str]):
+        """CAPM rate from beta vs the S&P 500 and the 10-year yield; configured fallback with a
+        warning when either input is missing. Returns (discount_rate, terminal_growth)."""
+        capm = (self.thresholds or load_thresholds()).capm
+        stock = [(p["date"], p["close"]) for p in market["history"]]
+        bench = [(p["date"], p["close"]) for p in market.get("benchmark_history") or []]
+        beta = calculate_beta(stock, bench) if bench else None
+        rf = market.get("risk_free_rate")
+        evidence.append(_calc("assumption:equity_risk_premium", "Equity risk premium", capm.equity_risk_premium,
+                              "ratio", "config/thresholds.yaml capm.equity_risk_premium"))
+        evidence.append(_calc("assumption:terminal_growth", "Terminal growth", capm.terminal_growth, "ratio",
+                              "config/thresholds.yaml capm.terminal_growth"))
+        if beta is not None:
+            evidence.append(_calc("calc:beta", "Beta vs S&P 500 (daily returns)", beta, "x",
+                                  "cov(r_stock, r_sp500) / var(r_sp500)",
+                                  f"{market['history'][0]['date']}..{market['history'][-1]['date']}"))
+        if beta is not None and rf is not None:
+            rate = capm_discount_rate(rf, beta, capm.equity_risk_premium, capm.beta_clamp, capm.rate_clamp)
+            evidence.append(_calc("assumption:discount_rate", "Discount rate (CAPM)", rate, "ratio",
+                                  f"CAPM: mkt:risk_free_rate + clamp(calc:beta, {list(capm.beta_clamp)}) x "
+                                  f"assumption:equity_risk_premium, clamped to {list(capm.rate_clamp)}"))
+        else:
+            rate = capm.fallback_rate
+            missing = " and ".join(x for x, ok in (("beta", beta is not None), ("risk-free rate", rf is not None)) if not ok)
+            warnings.append(f"CAPM inputs unavailable ({missing}): discount rate set to fallback {rate:.0%}")
+            evidence.append(_calc("assumption:discount_rate", "Discount rate (fallback)", rate, "ratio",
+                                  f"config/thresholds.yaml capm.fallback_rate ({missing} unavailable)"))
+        return rate, capm.terminal_growth
 
     def compute(self, financials: Dict, market: Dict) -> Dict:
         """Pure computation: fetched data -> evidence records, metrics and warnings."""
         sec = financials["records"]
         evidence: List[Dict] = [r for r in sec if r["id"].split(":")[1] in SEC_METRICS_FOR_GAMMA]
         evidence += market["records"]
-        warnings: List[str] = []
+        warnings: List[str] = list(market.get("warnings", []))
         price = market["price"]
-        discount_rate, terminal_growth = self._assumptions()
-        evidence.append(_calc("assumption:discount_rate", "Discount rate", discount_rate, "ratio",
-                              f"persona setting ({self.persona.value})"))
-        evidence.append(_calc("assumption:terminal_growth", "Terminal growth", terminal_growth, "ratio",
-                              f"persona setting ({self.persona.value})"))
+        discount_rate, terminal_growth = self._discount_rate(market, evidence, warnings)
 
         valuation: Dict = {"pe_ratio": None, "peg_ratio": None, "eps_growth_pct": None,
                            "dcf_analysis": None, "margin_of_safety": None}
@@ -184,12 +204,13 @@ class GammaAgent:
                       "latest FCF is not positive" if fcf_hist[-1][1] <= 0 else "no share count")
             warnings.append(f"DCF not computed: {reason}")
 
-        # --- Risk metrics from a year of daily closes
-        closes = [p["close"] for p in market["history"]]
+        # --- Risk metrics from the last year of daily closes
+        window = market.get("history_1y") or market["history"]
+        closes = [p["close"] for p in window]
         risk = calculate_risk_metrics(prices=closes)
         risk["volatility_annual"] = round(risk["volatility"] * math.sqrt(252), 6)
         risk["return_1y"] = round(closes[-1] / closes[0] - 1, 6)
-        period = f"{market['history'][0]['date']}..{market['history'][-1]['date']}"
+        period = f"{window[0]['date']}..{window[-1]['date']}"
         evidence.append(_calc("calc:volatility_annual", "Annualised volatility of daily returns",
                               risk["volatility_annual"], "ratio", "stdev(daily returns) * sqrt(252)", period))
         evidence.append(_calc("calc:sharpe", "Sharpe ratio (rf 2%)", risk.get("sharpe_ratio"), "x",
@@ -230,16 +251,15 @@ class GammaAgent:
         Returns a result dict with the validated output, or an explicit error. No LLM call
         is made when a data source fails.
         """
-        persona = self.persona.value
         print(f"[Gamma] Fetching market and SEC data for {ticker}...")
         if market is None:
             market = fetch_market_data(ticker)
         if not market.get("success"):
-            return agent_error("gamma", ticker, persona, market.get("error", "market data unavailable"), "data_source")
+            return agent_error("gamma", ticker, market.get("error", "market data unavailable"), "data_source")
         if financials is None:
             financials = fetch_financial_statements(ticker)
         if not financials.get("success"):
-            return agent_error("gamma", ticker, persona,
+            return agent_error("gamma", ticker,
                                financials.get("error", "SEC financial data unavailable"), "data_source")
 
         computed = self.compute(financials, market)
@@ -259,20 +279,22 @@ to the discount rate, and what the risk metrics say. State your valuation stance
 
 {schema_instructions('gamma', 1)}
 """
-        print(f"[Gamma] Analyzing valuation for {ticker} with {persona} persona...")
+        print(f"[Gamma] Analyzing valuation for {ticker}...")
         result = generate_agent_output(
             self.model, prompt, agent="gamma", round_number=1,
             evidence_ids=[e.id for e in evidence],
         )
         if not result.ok:
-            return agent_error("gamma", ticker, persona, result.error, result.error_type,
-                               token_usage=result.token_usage, attempts=result.attempts)
+            # The computed metrics stay available to the judge's gates even when the
+            # LLM output fails (margin of safety, volatility).
+            return agent_error("gamma", ticker, result.error, result.error_type,
+                               token_usage=result.token_usage, attempts=result.attempts,
+                               evidence=[e.model_dump() for e in evidence])
 
         return {
             "agent": self.name,
             "role": self.role,
             "ticker": ticker,
-            "persona": persona,
             "valuation_metrics": computed["valuation_metrics"],
             "risk_metrics": computed["risk_metrics"],
             "parameters": computed["parameters"],
@@ -304,11 +326,9 @@ def main():
     """Main entry point for testing Gamma agent."""
     parser = argparse.ArgumentParser(description="Gamma - Valuation Analysis Agent")
     parser.add_argument("--ticker", type=str, required=True, help="Stock ticker symbol")
-    parser.add_argument("--persona", type=str, default="zen", choices=["zen", "alpha"], help="Risk persona")
     args = parser.parse_args()
 
-    persona = RiskPersona.ZEN if args.persona == "zen" else RiskPersona.ALPHA
-    result = GammaAgent(persona=persona).analyze(args.ticker)
+    result = GammaAgent().analyze(args.ticker)
 
     print("\n" + "=" * 80)
     print(f"GAMMA'S VALUATION ANALYSIS - {args.ticker.upper()}")

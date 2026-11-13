@@ -1,0 +1,115 @@
+"""
+Load and validate config/thresholds.yaml (PHASE4_PLAN.md §3).
+
+All tunable numbers for the judge, circuit breaker, CAPM and HITL live in that file so they can
+be edited by hand. The path can be overridden with the KAI_THRESHOLDS_PATH environment variable.
+"""
+
+import os
+from functools import lru_cache
+from pathlib import Path
+from typing import Dict, Literal, Optional, Tuple
+
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
+DEFAULT_PATH = Path(__file__).resolve().parent.parent / "config" / "thresholds.yaml"
+
+
+class _Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class PersonaThresholds(_Strict):
+    buy_score: float = Field(gt=0, le=1)
+    min_margin_of_safety: float
+    max_volatility: Optional[float] = Field(default=None, gt=0)
+    sell_score: float = Field(ge=-1, lt=0)
+    buy_requires_dcf: bool
+
+
+class VerificationConfig(_Strict):
+    numeric_tolerance: float = Field(gt=0, lt=1)
+    min_checkable_claims: int = Field(ge=1)
+    min_quote_chars: int = Field(ge=1)
+
+
+class CircuitBreakerConfig(_Strict):
+    min_agent_faithfulness: float = Field(ge=0, le=1)
+    min_valid_agents: int = Field(ge=1, le=3)
+    token_limit: int = Field(gt=0)
+
+
+class IntegrityConfig(_Strict):
+    unexplained_stance_penalty: float = Field(ge=0, le=1)
+    retained_failed_claim_penalty: float = Field(ge=0, le=1)
+
+
+class CapmConfig(_Strict):
+    equity_risk_premium: float = Field(gt=0, lt=0.2)
+    beta_clamp: Tuple[float, float]
+    rate_clamp: Tuple[float, float]
+    fallback_rate: float = Field(gt=0, lt=0.5)
+    terminal_growth: float = Field(ge=0, lt=0.1)
+
+    @model_validator(mode="after")
+    def _ordered(self):
+        for name in ("beta_clamp", "rate_clamp"):
+            lo, hi = getattr(self, name)
+            if lo >= hi:
+                raise ValueError(f"{name} must be [low, high] with low < high")
+        if self.terminal_growth >= self.rate_clamp[0]:
+            raise ValueError("terminal_growth must be below the lowest discount rate")
+        return self
+
+
+class HitlConfig(_Strict):
+    approval_confidence: float = Field(ge=0, le=100)
+    low_confidence_action: Literal["warn", "approve"] = "warn"
+    approval_timeout_minutes: int = Field(gt=0)
+
+
+class Thresholds(_Strict):
+    personas: Dict[Literal["zen", "balanced", "alpha"], PersonaThresholds]
+    verification: VerificationConfig
+    circuit_breaker: CircuitBreakerConfig
+    integrity: IntegrityConfig
+    capm: CapmConfig
+    hitl: HitlConfig
+
+    @model_validator(mode="after")
+    def _all_personas(self):
+        missing = {"zen", "balanced", "alpha"} - set(self.personas)
+        if missing:
+            raise ValueError(f"personas missing: {sorted(missing)}")
+        return self
+
+    def persona(self, name: str) -> PersonaThresholds:
+        key = "balanced" if name in ("sigma", "balanced") else name
+        if key not in self.personas:
+            raise ValueError(f"unknown persona {name!r}; expected one of {sorted(self.personas)}")
+        return self.personas[key]
+
+
+def _resolve(path: Optional[str]) -> Path:
+    return Path(path or os.getenv("KAI_THRESHOLDS_PATH") or DEFAULT_PATH)
+
+
+@lru_cache(maxsize=8)
+def _load(path: str, mtime: float) -> Thresholds:
+    with open(path) as f:
+        raw = yaml.safe_load(f) or {}
+    try:
+        return Thresholds.model_validate(raw)
+    except ValidationError as e:
+        problems = "; ".join(f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in e.errors())
+        raise ValueError(f"invalid thresholds file {path}: {problems}") from None
+
+
+def load_thresholds(path: Optional[str] = None) -> Thresholds:
+    """Read and validate the thresholds file. Cached per path and modification time, so a
+    hand edit is picked up on the next call. Raises ValueError naming the bad key."""
+    p = _resolve(path)
+    if not p.exists():
+        raise ValueError(f"thresholds file not found: {p}")
+    return _load(str(p), p.stat().st_mtime)

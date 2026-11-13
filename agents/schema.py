@@ -351,12 +351,11 @@ def render_final(out: FinalOutput) -> str:
     return "\n".join(lines)
 
 
-def agent_error(agent: str, ticker: str, persona: str, error: str, error_type: str, **extra) -> Dict:
+def agent_error(agent: str, ticker: str, error: str, error_type: str, **extra) -> Dict:
     """Uniform failure result. analysis is None so nothing downstream mistakes it for output."""
     return {
         "agent": agent.capitalize(),
         "ticker": ticker,
-        "persona": persona,
         "error": error,
         "error_type": error_type,   # "data_source" | "llm" | "invalid_output"
         "analysis": None,

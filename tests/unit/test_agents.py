@@ -39,7 +39,7 @@ AGENTS = {
 
 class TestCharlieAgent:
     def test_prompt_contains_sec_numbers_and_output_validates(self, schema_llm):
-        result = CharlieAgent(persona=RiskPersona.ZEN, llm_client=schema_llm).analyze("AAPL")
+        result = CharlieAgent(llm_client=schema_llm).analyze("AAPL")
 
         assert "error" not in result, result.get("error")
         prompt = schema_llm.calls[0]
@@ -70,7 +70,7 @@ class TestCharlieAgent:
 
 class TestDeltaAgent:
     def test_prompt_contains_summaries_not_just_titles(self, schema_llm):
-        result = DeltaAgent(persona=RiskPersona.ALPHA, llm_client=schema_llm).analyze("AAPL", days=7)
+        result = DeltaAgent(llm_client=schema_llm).analyze("AAPL", days=7)
 
         assert "error" not in result, result.get("error")
         prompt = schema_llm.calls[0]
@@ -90,7 +90,7 @@ class TestDeltaAgent:
 
 class TestGammaAgent:
     def test_fetches_inputs_and_runs_dcf_and_risk(self, schema_llm):
-        result = GammaAgent(persona=RiskPersona.SIGMA, llm_client=schema_llm).analyze("AAPL")
+        result = GammaAgent(llm_client=schema_llm).analyze("AAPL")
 
         assert "error" not in result, result.get("error")
         v, r, p = result["valuation_metrics"], result["risk_metrics"], result["parameters"]
@@ -170,40 +170,54 @@ def test_citing_unknown_evidence_is_rejected(make_valid_output):
     assert "sec:made_up:FY1999" in result["error"]
 
 
-class TestSigmaAgent:
-    def test_evaluate_debate(self, fake_llm, tmp_path):
-        agent = SigmaAgent(llm_client=fake_llm)
-        debate_log = {
-            "debate_id": "test_debate",
-            "ticker": "AAPL",
-            "persona": "zen",
-            "metadata": {"agents_participated": ["charlie", "delta"], "mcp_tools_used": ["fetch_filing_data"]},
-            "rounds": [
-                {"round": 1, "agents": {
-                    "charlie": {"analysis": "Buy because growth.", "grounding_sources": ["10-K"]},
-                    "delta": {"analysis": "Sell because bad news.", "grounding_sources": ["News"]},
-                }},
-                {"round": 2, "agents": {
-                    "charlie": {"analysis": "Still Buy.", "grounding_sources": []},
-                }},
-            ],
-        }
-        path = tmp_path / "debate.json"
-        path.write_text(json.dumps(debate_log))
+class TestSigmaNoKeywordScoring:
+    def test_keyword_consistency_is_gone(self, fake_llm):
+        sigma = SigmaAgent(llm_client=fake_llm)
+        assert not hasattr(sigma, "evaluate_consistency")
+        assert not hasattr(sigma, "synthesize_recommendation")
 
-        result = agent.evaluate_debate(str(path))
+    def test_free_text_log_gets_no_verdict_not_a_keyword_guess(self, fake_llm, tmp_path):
+        # An old-style log with only prose ("Buy because growth") has no claims to verify,
+        # so Sigma refuses to guess a verdict from words.
+        log = {"debate_id": "old", "ticker": "AAPL", "persona": "zen", "rounds": [
+            {"round": 1, "agents": {"charlie": {"analysis": "Strong Buy because growth.",
+                                                "grounding_sources": ["10-K"]}}}]}
+        path = tmp_path / "old.json"
+        path.write_text(json.dumps(log))
+        fr = SigmaAgent(llm_client=fake_llm).evaluate_debate(str(path))["final_recommendation"]
+        assert fr["recommendation"] == "No Verdict" and fr["confidence"] is None
+        assert fake_llm.calls == []
 
-        assert result["debate_id"] == "test_debate"
-        assert result["evaluation"]["faithfulness_score"] > 0
-        assert result["evaluation"]["consistency_score"] > 0
-        assert "final_recommendation" in result
 
-    def test_consistency_calculation(self, fake_llm):
-        agent = SigmaAgent(llm_client=fake_llm)
-        debate_log = {
-            "rounds": [
-                {"agents": {"charlie": {"analysis": "Buy strong growth"}}},
-                {"agents": {"charlie": {"analysis": "Sell weak internals"}}},
-            ]
-        }
-        assert agent.evaluate_consistency(debate_log) < 100
+# ---------------------------------------------------------------- persona (C7, PHASE4_PLAN §9)
+
+class TestPersonaFreeAgents:
+    def test_system_instructions_carry_no_persona(self):
+        from coordinator.personas import (get_charlie_system_instruction, get_delta_system_instruction,
+                                          get_gamma_system_instruction)
+        for fn in (get_charlie_system_instruction, get_delta_system_instruction, get_gamma_system_instruction):
+            text = fn().lower()
+            for word in ("zen", "alpha", "conservative", "aggressive", "persona"):
+                assert word not in text, (fn.__name__, word)
+
+    def test_constructors_take_no_persona(self):
+        import inspect
+        for cls in (CharlieAgent, DeltaAgent, GammaAgent):
+            assert "persona" not in inspect.signature(cls.__init__).parameters
+
+    def test_gamma_inputs_identical_for_every_persona(self, make_valid_output):
+        import os
+        from coordinator.server import DebateCoordinator
+        evidence, params = {}, {}
+        for persona in ("zen", "balanced", "alpha"):
+            llm = FakeLLMClient(responses=make_valid_output)
+            coord = DebateCoordinator("AAPL", persona, llm_client=llm)
+            result = coord.run_debate(rounds=1)
+            os.remove(result["log_file"])
+            evidence[persona] = [e.model_dump() for e in coord.transcript.evidence["gamma"]]
+            gamma_prompt = next(p for p in llm.calls if '"agent": "gamma", "round": 1' in p)
+            params[persona] = gamma_prompt
+        assert evidence["zen"] == evidence["balanced"] == evidence["alpha"]
+        assert params["zen"] == params["balanced"] == params["alpha"]
+        rate = {e["id"]: e for e in evidence["zen"]}["assumption:discount_rate"]
+        assert rate["source"].startswith("computed: CAPM")

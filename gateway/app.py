@@ -285,13 +285,8 @@ async def run_analysis(session_id: str, request: AnalysisRequest):
     try:
         session = sessions[session_id]
         
-        # Determine coordinator persona
-        if request.persona == PersonaType.ZEN:
-            coord_persona = RiskPersona.ZEN
-        elif request.persona == PersonaType.BALANCED:
-            coord_persona = RiskPersona.SIGMA
-        else:
-            coord_persona = RiskPersona.ALPHA
+        # Persona selects the judge's decision thresholds only (agents never see it)
+        coord_persona = RiskPersona(request.persona.value)
             
         # Initialize coordinator in background
         coordinator = DebateCoordinator(request.ticker, coord_persona)
@@ -314,7 +309,7 @@ async def run_analysis(session_id: str, request: AnalysisRequest):
         session["debate_log"] = debate_result["log_file"]
         
         # 3. Evaluate with Sigma
-        evaluation = sigma_agent.evaluate_debate(debate_result["log_file"])
+        evaluation = sigma_agent.evaluate_debate(debate_result["log_file"], persona=request.persona.value)
         session["evaluation"] = evaluation
         
         # 4. Generate Alpha Packet
@@ -330,8 +325,9 @@ async def run_analysis(session_id: str, request: AnalysisRequest):
         session["alpha_packet_path"] = packet_path
         
         # 5. Check HITL requirement
-        recommendation = evaluation["final_recommendation"]["recommendation"]
-        confidence = evaluation["final_recommendation"]["confidence"]
+        final = evaluation["final_recommendation"]
+        recommendation = final["recommendation"]
+        confidence = final["confidence"]
         
         hitl_mode, reason = hitl_manager.evaluate_hitl_requirement(
             recommendation, confidence
@@ -344,7 +340,7 @@ async def run_analysis(session_id: str, request: AnalysisRequest):
         if hitl_mode == HITLMode.PASSIVE:
             # Passive mode: Just notify
             notification = hitl_manager.create_notification(
-                recommendation, confidence, request.ticker
+                recommendation, confidence, request.ticker, reason=final.get("reason")
             )
             session["notification"] = notification.model_dump()
             session["status"] = AnalysisStatus.COMPLETED
@@ -352,7 +348,7 @@ async def run_analysis(session_id: str, request: AnalysisRequest):
         else:
             # Active mode: Require approval
             challenge = hitl_manager.create_step_up_challenge(
-                recommendation, confidence, request.ticker
+                recommendation, confidence, request.ticker, key_points=final.get("supporting_points") or None
             )
             session["step_up_challenge"] = challenge.model_dump()
             session["challenge_id"] = challenge.challenge_id

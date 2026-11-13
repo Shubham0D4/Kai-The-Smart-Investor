@@ -21,6 +21,7 @@ class RecommendationType(str, Enum):
     BUY = "Buy"
     HOLD = "Hold"
     SELL = "Sell"
+    NO_VERDICT = "No Verdict"
 
 
 class AnalysisStatus(str, Enum):
@@ -99,7 +100,7 @@ class ChatResponse(BaseModel):
 class QualityScores(BaseModel):
     """Debate quality scores."""
     faithfulness: float = Field(..., description="Faithfulness score (0-100)")
-    consistency: float = Field(..., description="Consistency score (0-100)")
+    integrity: float = Field(..., description="Debate integrity score (0-100): critiques answered, failed claims fixed")
     overall: float = Field(..., description="Overall quality score (0-100)")
 
 
@@ -117,10 +118,11 @@ class AlphaPacket(BaseModel):
     ticker: str
     persona: str
     recommendation: RecommendationType
-    confidence: float
+    confidence: Optional[float] = Field(None, description="Only Buy and Sell carry a confidence")
     quality_scores: QualityScores
     debate_summary: DebateSummary
     key_risks: List[str]
+    verdict_detail: Optional[Dict[str, Any]] = Field(None, description="Score, gates, supporting points, warnings")
     debate_log: str
     timestamp: str
     signature: str
@@ -142,7 +144,7 @@ class StepUpChallenge(BaseModel):
     challenge_id: str = Field(..., description="Unique challenge ID")
     message: str = Field(..., description="Challenge message for user")
     recommendation: RecommendationType = Field(..., description="Recommended action")
-    confidence: float = Field(..., description="Confidence level (0-100)")
+    confidence: Optional[float] = Field(None, description="Confidence level (0-100)")
     requires_approval: bool = Field(True, description="Whether approval is required")
     expires_at: str = Field(..., description="Challenge expiration timestamp")
     key_points: List[str] = Field(default_factory=list, description="Key supporting points")
@@ -190,7 +192,7 @@ class HistoryItem(BaseModel):
     ticker: str
     persona: PersonaType
     recommendation: RecommendationType
-    confidence: float
+    confidence: Optional[float] = None
     created_at: str
     alpha_packet_id: str
 

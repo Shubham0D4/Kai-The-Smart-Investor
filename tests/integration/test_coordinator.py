@@ -53,16 +53,16 @@ def test_round1_logs_structured_grounded_output(schema_llm, cleanup):
     assert {"PE Ratio", "DCF Value per Share"} <= formulas
 
 
-def test_sec_down_fails_charlie_and_gamma_but_not_delta(schema_llm, failing_sources, cleanup):
+def test_sec_down_leaves_one_agent_so_no_debate(schema_llm, failing_sources, cleanup):
+    # Charlie and Gamma both need SEC data; Delta alone is not a debate (PHASE4_PLAN J5)
     failing_sources.add("sec_facts")
     coordinator = DebateCoordinator("AAPL", RiskPersona.ZEN, llm_client=schema_llm)
     result = coordinator.run_debate(rounds=1)
     cleanup.append(result["log_file"])
 
-    round1 = _load_log(result)["rounds"][0]["agents"]
-    assert round1["charlie"]["status"] == "failed" and "HTTP 503" in round1["charlie"]["error"]
-    assert round1["gamma"]["status"] == "failed"
-    assert "output" in round1["delta"]["metadata"]
+    assert result["status"] == "NO_VERDICT" and result["reason"] == "INSUFFICIENT_EVIDENCE"
+    assert any("HTTP 503" in w for w in result["warnings"])
+    assert schema_llm.calls == []
 
 
 def test_run_debate_takes_no_user_valuation_inputs():

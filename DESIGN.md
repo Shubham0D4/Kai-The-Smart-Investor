@@ -11,7 +11,7 @@ each agent its slice. Every record has a stable ID, value, unit, period and sour
 
 | Agent | Receives | Source | Example ID |
 |---|---|---|---|
-| Charlie | Last 5 fiscal years + latest quarter: revenue, gross profit, operating income, net income, diluted EPS, operating cash flow, capex, cash, total debt, equity, shares | SEC XBRL `companyfacts` API (same host and User-Agent as today's `sec_filings.py`), each fact tagged with its accession number | `sec:Revenues:FY2025` |
+| Charlie | Last 5 fiscal years + latest quarter: revenue, gross profit, operating income, net income, diluted EPS, operating cash flow, capex, cash, total debt, equity, shares | SEC XBRL `companyfacts` API (same host and User-Agent as today's `sec_filings.py`), each fact tagged with its accession number | `sec:revenue:FY2025` |
 | Delta | Up to 15 articles: title, publisher, date, URL, summary text, `providers[]` | yfinance news, Yahoo Finance RSS, Nasdaq RSS and Google News RSS, fetched in parallel and merged (below) | `news:7` |
 | Gamma | Price, 2y daily closes for the stock and the S&P 500, 10-year Treasury yield, shares outstanding (yfinance); EPS, net debt and 5y free cash flow = OCF − capex (from Charlie's SEC facts); computed PE, PEG, beta, DCF, annualised volatility, Sharpe (`finance_math.py`) | yfinance + SEC + computed | `mkt:price`, `calc:dcf.value_per_share` |
 
@@ -51,7 +51,7 @@ the agent is marked failed.
   "claims": [
     {"id": "C1", "kind": "numeric", "text": "Revenue grew 6% in FY2025",
      "value": 0.06, "unit": "ratio", "op": "growth",
-     "evidence": ["sec:Revenues:FY2025", "sec:Revenues:FY2024"]},
+     "evidence": ["sec:revenue:FY2025", "sec:revenue:FY2024"]},
     {"id": "C2", "kind": "quote", "text": "Analysts flag weak China demand",
      "quote": "weak demand in China", "evidence": ["news:7"]},
     {"id": "C3", "kind": "inference", "text": "Margins are durable", "based_on": ["C1"]}

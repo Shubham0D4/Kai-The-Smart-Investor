@@ -19,6 +19,7 @@ from agents.charlie_fundamental.agent import CharlieAgent
 from agents.delta_sentiment.agent import DeltaAgent
 from agents.gamma_valuation.agent import GammaAgent
 from judge.sigma_agent import SigmaAgent
+from mcp_server.tools.sec_financials import fetch_financial_statements
 import time
 
 from dotenv import load_dotenv
@@ -99,20 +100,16 @@ class DebateCoordinator:
         rounds: int = 3,
         charlie_filing_type: str = "10-K",
         delta_days: int = 7,
-        gamma_price: Optional[float] = None,
-        gamma_eps: Optional[float] = None,
-        gamma_growth_rate: Optional[float] = None
     ) -> Dict:
         """
         Run a complete multi-round debate.
         
         Args:
             rounds: Number of debate rounds (default: 3)
-            charlie_filing_type: SEC filing type for Charlie
+            charlie_filing_type: SEC filing type for Charlie's reference link
             delta_days: Days of news for Delta
-            gamma_price: Current price for Gamma (if None, skip Gamma in Round 1)
-            gamma_eps: EPS for Gamma
-            gamma_growth_rate: Growth rate for Gamma
+
+        Gamma fetches its own price, EPS, cash flows, shares and price history.
             
         Returns:
             Complete debate results
@@ -122,13 +119,7 @@ class DebateCoordinator:
         
         # Round 1: Initial Analysis
         self.logger.log_round_start(1)
-        round1_results = self._run_round_1(
-            charlie_filing_type,
-            delta_days,
-            gamma_price,
-            gamma_eps,
-            gamma_growth_rate
-        )
+        round1_results = self._run_round_1(charlie_filing_type, delta_days)
         
         if rounds >= 2:
             # Round 2: Cross-Critique
@@ -188,31 +179,34 @@ class DebateCoordinator:
         self,
         charlie_filing_type: str,
         delta_days: int,
-        gamma_price: Optional[float],
-        gamma_eps: Optional[float],
-        gamma_growth_rate: Optional[float]
     ) -> Dict:
         """
-        Round 1: Initial independent analysis from each agent.
+        Round 1: Initial independent analysis from each agent, each grounded in fetched data.
+        SEC financials are fetched once and shared by Charlie and Gamma.
         """
         results = {}
+        self.logger.log_system_message(f"Fetching SEC XBRL financial statements for {self.ticker}...")
+        financials = fetch_financial_statements(self.ticker)
+        if not financials.get("success"):
+            self.logger.log_system_message(f"SEC financial data unavailable: {financials.get('error')}")
         
         # Charlie: Fundamental Analysis
         self.logger.log_system_message(f"Charlie (Fundamental Specialist) is fetching SEC filings for {self.ticker}...")
         print(f"[COORDINATOR] Calling Charlie for fundamental analysis...")
-        charlie_result = self.charlie.analyze(self.ticker, charlie_filing_type)
+        charlie_result = self.charlie.analyze(self.ticker, charlie_filing_type, financials=financials)
         
         if not charlie_result.get("error"):
-            grounding_sources = [
-                f"{charlie_result['filing_analyzed']['form']} filing {charlie_result['filing_analyzed']['filing_date']}"
-            ]
+            grounding_sources = [f"SEC XBRL company facts ({', '.join(financials['fiscal_years'])})"]
+            ref = charlie_result.get("filing_analyzed")
+            if ref:
+                grounding_sources.append(f"{ref['form']} filing {ref['filing_date']} (reference)")
             self.logger.log_agent_response(
                 round_number=1,
                 agent_name="charlie",
                 analysis=charlie_result["analysis"],
                 grounding_sources=grounding_sources,
-                mcp_tools_used=["fetch_filing_data"],
-                metadata=charlie_result.get("filing_analyzed", {})
+                mcp_tools_used=["fetch_financial_statements", "fetch_filing_data"],
+                metadata=self._structured_metadata(charlie_result, filing_reference=ref)
             )
             results["charlie"] = charlie_result
             self._track_usage("charlie", charlie_result)
@@ -235,7 +229,7 @@ class DebateCoordinator:
                 analysis=delta_result["analysis"],
                 grounding_sources=grounding_sources,
                 mcp_tools_used=["get_news_stream"],
-                metadata=delta_result.get("news_analyzed", {})
+                metadata=self._structured_metadata(delta_result, news_analyzed=delta_result.get("news_analyzed", {}))
             )
             results["delta"] = delta_result
             self._track_usage("delta", delta_result)
@@ -246,39 +240,37 @@ class DebateCoordinator:
         # Gamma: Valuation Analysis
         self.logger.log_system_message(f"Gamma (Valuation Specialist) is calculating DCF and multiples for {self.ticker}...")
         print(f"[COORDINATOR] Calling Gamma for valuation analysis...")
-        gamma_result = self.gamma.analyze(
-            ticker=self.ticker,
-            price=gamma_price,
-            eps=gamma_eps,
-            growth_rate=gamma_growth_rate
-        )
+        gamma_result = self.gamma.analyze(ticker=self.ticker, financials=financials)
         
         if not gamma_result.get("error"):
-            grounding_sources = [
-                f"Valuation metrics calculation ({'Parameters provided' if gamma_price else 'No direct inputs'})"
-            ]
-            
             self.logger.log_agent_response(
                 round_number=1,
                 agent_name="gamma",
                 analysis=gamma_result["analysis"],
-                grounding_sources=grounding_sources,
-                mcp_tools_used=["calculate_valuation_metrics"],
-                metadata=gamma_result.get("parameters", {})
+                grounding_sources=["yfinance price and 1y daily history", "SEC XBRL company facts"],
+                mcp_tools_used=["fetch_market_data", "fetch_financial_statements",
+                                "calculate_valuation_metrics", "calculate_risk_metrics"],
+                metadata=self._structured_metadata(gamma_result, parameters=gamma_result.get("parameters", {}))
             )
             
-            # Log formulas for traceability if metrics exist
-            if "valuation_metrics" in gamma_result and gamma_price and gamma_eps:
-                metrics = gamma_result["valuation_metrics"]
-                if "pe_ratio" in metrics:
-                    self.logger.log_formula(
-                        round_number=1,
-                        agent_name="gamma",
-                        formula_name="PE Ratio",
-                        formula="PE = Price / EPS",
-                        parameters={"price": gamma_price, "eps": gamma_eps},
-                        result=metrics["pe_ratio"]
-                    )
+            # Log formulas for traceability
+            metrics = gamma_result.get("valuation_metrics", {})
+            params = gamma_result.get("parameters", {})
+            if metrics.get("pe_ratio") is not None:
+                self.logger.log_formula(
+                    round_number=1, agent_name="gamma", formula_name="PE Ratio",
+                    formula="PE = Price / Diluted EPS",
+                    parameters={"price": params.get("current_price"), "eps": params.get("eps")},
+                    result=metrics["pe_ratio"],
+                )
+            if metrics.get("dcf_analysis"):
+                self.logger.log_formula(
+                    round_number=1, agent_name="gamma", formula_name="DCF Value per Share",
+                    formula="(PV(5y FCF) + PV(terminal value) - net debt) / shares",
+                    parameters={k: params.get(k) for k in
+                                ("discount_rate", "terminal_growth", "fcf_growth", "net_debt", "shares_outstanding")},
+                    result=metrics["dcf_analysis"]["value_per_share"],
+                )
             
             results["gamma"] = gamma_result
             self._track_usage("gamma", gamma_result)
@@ -454,6 +446,16 @@ Keep your response concise and structured.
         
         return results
     
+    @staticmethod
+    def _structured_metadata(result: Dict, **extra) -> Dict:
+        """Keep the validated output, the evidence it may cite and any data warnings in the log."""
+        return {
+            "output": result.get("output"),
+            "evidence": result.get("evidence", []),
+            "warnings": result.get("warnings", []),
+            **extra,
+        }
+
     def _prepare_round_context(self, round_results: Dict) -> str:
         """Prepare context summary from previous round."""
         context_parts = []
@@ -478,9 +480,6 @@ def main():
     parser.add_argument("--ticker", type=str, required=True, help="Stock ticker symbol")
     parser.add_argument("--persona", type=str, default="zen", choices=["zen", "alpha", "balanced"], help="Risk persona")
     parser.add_argument("--rounds", type=int, default=3, choices=[1, 2, 3], help="Number of debate rounds")
-    parser.add_argument("--price", type=float, help="Current stock price (for Gamma)")
-    parser.add_argument("--eps", type=float, help="Earnings per share (for Gamma)")
-    parser.add_argument("--growth-rate", type=float, help="Expected growth rate % (for Gamma)")
     
     args = parser.parse_args()
     
@@ -495,12 +494,7 @@ def main():
     coordinator = DebateCoordinator(args.ticker, persona)
     
     # Run debate
-    result = coordinator.run_debate(
-        rounds=args.rounds,
-        gamma_price=args.price,
-        gamma_eps=args.eps,
-        gamma_growth_rate=args.growth_rate
-    )
+    result = coordinator.run_debate(rounds=args.rounds)
     
     print(f"\n[COORDINATOR] Debate complete!")
     print(f"Debate ID: {result['debate_id']}")

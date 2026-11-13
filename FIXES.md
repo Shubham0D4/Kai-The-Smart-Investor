@@ -1,8 +1,8 @@
 # Kai fix list
 
 ## Conceptual
-- [ ] C1 Charlie never reads the filing: prompt has only form type, date, URL.
-- [ ] C2 Delta sees only headlines. Gamma depends on user-typed price/EPS/growth;
+- [x] C1 Charlie never reads the filing: prompt has only form type, date, URL.
+- [x] C2 Delta sees only headlines. Gamma depends on user-typed price/EPS/growth;
       DCF and risk metrics never run (coordinator passes no cash flows or price history).
 - [ ] C3 Rounds 2 and 3 are fresh LLM calls with no history. Round 2 gets a
       300-char truncation; round 3 gets no debate content at all.
@@ -51,3 +51,29 @@
   still builds its own persona-specific MultiLLMClient (injection is per instance).
 - Found: gateway/app.py builds AP2Handler()/SigmaAgent() at import, so importing the app
   has side effects (key generation, client init).
+
+## Phase 2 (branch phase-2-grounding) notes
+- C1: Charlie gets 5 fiscal years of SEC XBRL company facts (revenue, gross profit, operating
+  income, net income, diluted EPS, operating cash flow, capex, cash, long-term debt,
+  commercial paper, equity, shares) as evidence records in the prompt. The filing link is
+  a reference only; if it fails it is a warning, not an error.
+- C2 Gamma: fetches price, shares and 1y of daily closes (yfinance) and EPS, cash flows and
+  debt (SEC); price/eps/growth_rate removed from coordinator, gateway AnalysisRequest and
+  scripts/simulate_debate.py (the frontend never sent them). PE, PEG, DCF and risk metrics
+  run in code every time the data is there.
+- C2 Delta: news from yfinance, Yahoo RSS, Nasdaq RSS and Google RSS in parallel, merged by
+  majority; prompt carries summaries; headline-only articles are flagged.
+- All three agents return the DESIGN.md §2 schema (agents/schema.py), validated with
+  pydantic, retried once, then failed with error_type invalid_output. Claims citing evidence
+  IDs that were not provided are rejected. A failed data source returns error_type
+  data_source and makes no LLM call.
+- Fixed while here: DCF now subtracts net debt (equity value / shares); news `days`
+  filter was computed but never applied.
+- Not done here (other phases): discount rate and terminal growth are still persona-based
+  (C7, and DESIGN.md's CAPM rate); rounds 2-3 are still free text (C3); Sigma still scores
+  the rendered text (C4-C6). Latest-quarter (10-Q) figures from DESIGN.md §1 are not
+  fetched yet; annual figures only.
+- Found: yfinance "AAPL" news includes many stories mainly about other companies (e.g.
+  Nvidia). No relevance filter yet; Delta is told to weigh evidence, but this will need one.
+- Found: the semantic cache in mcp_server still returns results by embedding similarity
+  (DESIGN.md §7); the new tools are exposed through it unchanged.

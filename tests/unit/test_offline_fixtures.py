@@ -97,3 +97,66 @@ def test_ap2_generates_key_at_env_path_when_missing(tmp_path, monkeypatch):
 def test_ap2_public_path_never_equals_private_path(tmp_path):
     handler = AP2Handler(private_key_path=str(tmp_path / "mykey.pem"))
     assert handler.public_key_path != handler.private_key_path
+
+
+# ---------------------------------------------------------------- Phase 2 data sources
+
+from mcp_server.tools.finance_math import calculate_dcf_value
+from mcp_server.tools.market_data import fetch_market_data
+from mcp_server.tools.news_stream import merge_articles
+from mcp_server.tools.sec_financials import fetch_financial_statements
+
+
+def test_sec_financials_from_fixture():
+    r = fetch_financial_statements("AAPL")
+    assert r["success"] and r["company_name"] == "Apple Inc."
+    assert r["fiscal_years"] == ["FY2022", "FY2023", "FY2024", "FY2025", "FY2026"]
+    by_id = {x["id"]: x for x in r["records"]}
+    assert by_id["sec:revenue:FY2026"]["value"] == 478834000000
+    assert by_id["sec:eps_diluted:FY2026"]["value"] == 8.98
+    assert "0000320193-26-000026" in by_id["sec:revenue:FY2026"]["source"]
+
+
+def test_sec_financials_failure_is_explicit(failing_sources):
+    failing_sources.add("sec_facts")
+    r = fetch_financial_statements("AAPL")
+    assert not r["success"] and "HTTP 503" in r["error"]
+
+
+def test_market_data_from_fixture_and_failure(failing_sources):
+    r = fetch_market_data("AAPL")
+    assert r["success"] and len(r["history"]) > 200 and r["shares_outstanding"] > 0
+    failing_sources.add("yfinance")
+    r = fetch_market_data("AAPL")
+    assert not r["success"] and "unavailable" in r["error"]
+
+
+def test_news_all_providers_down(failing_sources):
+    failing_sources.update({"yfinance", "yahoo_rss", "nasdaq_rss", "google_rss"})
+    r = get_news_stream("AAPL")
+    assert not r["success"]
+    assert set(r["providers_failed"]) == {"yfinance", "yahoo_rss", "nasdaq_rss", "google_rss"}
+
+
+def test_news_merge_majority_and_tie_break():
+    base = {"title": "Apple beats estimates", "url": "https://x.com/a?utm=1", "summary": None}
+    merged = merge_articles({
+        "yfinance": [dict(base, published_at="2026-11-12T10:00:00Z", source="Reuters", summary="S1")],
+        "yahoo_rss": [dict(base, url="https://x.com/a", published_at="2026-11-12T11:00:00Z", source=None)],
+        "nasdaq_rss": [dict(base, url="https://x.com/a/", published_at="2026-11-12T11:00:00Z", source="Reuters")],
+        "google_rss": [dict(base, url="https://news.google.com/r/1", published_at="2026-11-12T10:00:00Z",
+                            source="AP")],
+    })
+    assert len(merged) == 1                      # same article: by URL, then by title
+    a = merged[0]
+    assert a["providers"] == ["yfinance", "yahoo_rss", "nasdaq_rss", "google_rss"]
+    assert a["source"] == "Reuters"              # 2 votes vs 1
+    assert a["published_at"] == "2026-11-12T10:00:00Z"   # 2-2 tie -> yfinance's value
+    assert a["summary"] == "S1" and not a["headline_only"]
+
+
+def test_dcf_subtracts_net_debt():
+    without = calculate_dcf_value([100, 100], 0.10, 0.02, shares_outstanding=10)
+    with_debt = calculate_dcf_value([100, 100], 0.10, 0.02, shares_outstanding=10, net_debt=50)
+    assert with_debt["equity_value"] == pytest.approx(without["enterprise_value"] - 50)
+    assert with_debt["value_per_share"] == pytest.approx(without["value_per_share"] - 5, abs=0.01)

@@ -74,9 +74,6 @@ class AnalysisRequest(BaseModel):
     ticker: str = Field(..., description="Stock ticker symbol", min_length=1, max_length=5)
     persona: PersonaType = Field(default=PersonaType.ZEN, description="Risk persona")
     user_id: str = Field(..., description="User identifier")
-    price: Optional[float] = Field(None, description="Current stock price (optional)")
-    eps: Optional[float] = Field(None, description="Earnings per share (optional)")
-    growth_rate: Optional[float] = Field(None, description="Expected growth rate % (optional)")
 
 
 class ApprovalRequest(BaseModel):

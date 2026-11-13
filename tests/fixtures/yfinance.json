@@ -21,7 +21,8 @@
   "AAPL": {
    "fast_info": {
     "last_price": 354.8800048828125,
-    "previous_close": 355.48
+    "previous_close": 355.48,
+    "shares": 14532182000
    },
    "info": {
     "shortName": "Apple Inc.",
@@ -128,7 +129,1167 @@
      "date": "2026-11-12",
      "close": 354.8800048828125
     }
+   ],
+   "1y": [
+    {
+     "date": "2025-11-13",
+     "close": 272.0024
+    },
+    {
+     "date": "2025-11-14",
+     "close": 271.4643
+    },
+    {
+     "date": "2025-11-17",
+     "close": 266.5315
+    },
+    {
+     "date": "2025-11-18",
+     "close": 266.5115
+    },
+    {
+     "date": "2025-11-19",
+     "close": 267.6276
+    },
+    {
+     "date": "2025-11-20",
+     "close": 265.3257
+    },
+    {
+     "date": "2025-11-21",
+     "close": 270.5475
+    },
+    {
+     "date": "2025-11-24",
+     "close": 274.9621
+    },
+    {
+     "date": "2025-11-25",
+     "close": 276.0084
+    },
+    {
+     "date": "2025-11-26",
+     "close": 276.5864
+    },
+    {
+     "date": "2025-11-28",
+     "close": 277.882
+    },
+    {
+     "date": "2025-12-01",
+     "close": 282.1172
+    },
+    {
+     "date": "2025-12-02",
+     "close": 285.1964
+    },
+    {
+     "date": "2025-12-03",
+     "close": 283.1635
+    },
+    {
+     "date": "2025-12-04",
+     "close": 279.7255
+    },
+    {
+     "date": "2025-12-05",
+     "close": 277.8122
+    },
+    {
+     "date": "2025-12-08",
+     "close": 276.9252
+    },
+    {
+     "date": "2025-12-09",
+     "close": 276.2177
+    },
+    {
+     "date": "2025-12-10",
+     "close": 277.8122
+    },
+    {
+     "date": "2025-12-11",
+     "close": 277.0648
+    },
+    {
+     "date": "2025-12-12",
+     "close": 277.3139
+    },
+    {
+     "date": "2025-12-15",
+     "close": 273.1583
+    },
+    {
+     "date": "2025-12-16",
+     "close": 273.6566
+    },
+    {
+     "date": "2025-12-17",
+     "close": 270.8962
+    },
+    {
+     "date": "2025-12-18",
+     "close": 271.245
+    },
+    {
+     "date": "2025-12-19",
+     "close": 272.7199
+    },
+    {
+     "date": "2025-12-22",
+     "close": 270.0293
+    },
+    {
+     "date": "2025-12-23",
+     "close": 271.4144
+    },
+    {
+     "date": "2025-12-24",
+     "close": 272.8594
+    },
+    {
+     "date": "2025-12-26",
+     "close": 272.4508
+    },
+    {
+     "date": "2025-12-29",
+     "close": 272.8096
+    },
+    {
+     "date": "2025-12-30",
+     "close": 272.1319
+    },
+    {
+     "date": "2025-12-31",
+     "close": 270.9161
+    },
+    {
+     "date": "2026-01-02",
+     "close": 270.0692
+    },
+    {
+     "date": "2026-01-05",
+     "close": 266.3322
+    },
+    {
+     "date": "2026-01-06",
+     "close": 261.4491
+    },
+    {
+     "date": "2026-01-07",
+     "close": 259.4261
+    },
+    {
+     "date": "2026-01-08",
+     "close": 258.1407
+    },
+    {
+     "date": "2026-01-09",
+     "close": 258.4695
+    },
+    {
+     "date": "2026-01-12",
+     "close": 259.3465
+    },
+    {
+     "date": "2026-01-13",
+     "close": 260.1437
+    },
+    {
+     "date": "2026-01-14",
+     "close": 259.0575
+    },
+    {
+     "date": "2026-01-15",
+     "close": 257.3135
+    },
+    {
+     "date": "2026-01-16",
+     "close": 254.6429
+    },
+    {
+     "date": "2026-01-20",
+     "close": 245.8435
+    },
+    {
+     "date": "2026-01-21",
+     "close": 246.7902
+    },
+    {
+     "date": "2026-01-22",
+     "close": 247.4878
+    },
+    {
+     "date": "2026-01-23",
+     "close": 247.1789
+    },
+    {
+     "date": "2026-01-26",
+     "close": 254.5233
+    },
+    {
+     "date": "2026-01-27",
+     "close": 257.3733
+    },
+    {
+     "date": "2026-01-28",
+     "close": 255.5497
+    },
+    {
+     "date": "2026-01-29",
+     "close": 257.3833
+    },
+    {
+     "date": "2026-01-30",
+     "close": 258.5791
+    },
+    {
+     "date": "2026-02-02",
+     "close": 269.0726
+    },
+    {
+     "date": "2026-02-03",
+     "close": 268.5445
+    },
+    {
+     "date": "2026-02-04",
+     "close": 275.5301
+    },
+    {
+     "date": "2026-02-05",
+     "close": 274.9521
+    },
+    {
+     "date": "2026-02-06",
+     "close": 277.1544
+    },
+    {
+     "date": "2026-02-09",
+     "close": 273.9227
+    },
+    {
+     "date": "2026-02-10",
+     "close": 272.985
+    },
+    {
+     "date": "2026-02-11",
+     "close": 274.8004
+    },
+    {
+     "date": "2026-02-12",
+     "close": 261.0654
+    },
+    {
+     "date": "2026-02-13",
+     "close": 255.1305
+    },
+    {
+     "date": "2026-02-17",
+     "close": 263.21
+    },
+    {
+     "date": "2026-02-18",
+     "close": 263.6787
+    },
+    {
+     "date": "2026-02-19",
+     "close": 259.9183
+    },
+    {
+     "date": "2026-02-20",
+     "close": 263.9082
+    },
+    {
+     "date": "2026-02-23",
+     "close": 265.5041
+    },
+    {
+     "date": "2026-02-24",
+     "close": 271.449
+    },
+    {
+     "date": "2026-02-25",
+     "close": 273.5337
+    },
+    {
+     "date": "2026-02-26",
+     "close": 272.2569
+    },
+    {
+     "date": "2026-02-27",
+     "close": 263.5092
+    },
+    {
+     "date": "2026-03-02",
+     "close": 264.0478
+    },
+    {
+     "date": "2026-03-03",
+     "close": 263.0803
+    },
+    {
+     "date": "2026-03-04",
+     "close": 261.8534
+    },
+    {
+     "date": "2026-03-05",
+     "close": 259.6291
+    },
+    {
+     "date": "2026-03-06",
+     "close": 256.8062
+    },
+    {
+     "date": "2026-03-09",
+     "close": 259.2201
+    },
+    {
+     "date": "2026-03-10",
+     "close": 260.1677
+    },
+    {
+     "date": "2026-03-11",
+     "close": 260.1477
+    },
+    {
+     "date": "2026-03-12",
+     "close": 255.1105
+    },
+    {
+     "date": "2026-03-13",
+     "close": 249.4849
+    },
+    {
+     "date": "2026-03-16",
+     "close": 252.178
+    },
+    {
+     "date": "2026-03-17",
+     "close": 253.5844
+    },
+    {
+     "date": "2026-03-18",
+     "close": 249.3053
+    },
+    {
+     "date": "2026-03-19",
+     "close": 248.3278
+    },
+    {
+     "date": "2026-03-20",
+     "close": 247.3603
+    },
+    {
+     "date": "2026-03-23",
+     "close": 250.8514
+    },
+    {
+     "date": "2026-03-24",
+     "close": 251.001
+    },
+    {
+     "date": "2026-03-25",
+     "close": 251.9785
+    },
+    {
+     "date": "2026-03-26",
+     "close": 252.2478
+    },
+    {
+     "date": "2026-03-27",
+     "close": 248.1682
+    },
+    {
+     "date": "2026-03-30",
+     "close": 246.0038
+    },
+    {
+     "date": "2026-03-31",
+     "close": 253.1456
+    },
+    {
+     "date": "2026-04-01",
+     "close": 254.9809
+    },
+    {
+     "date": "2026-04-02",
+     "close": 255.2702
+    },
+    {
+     "date": "2026-04-06",
+     "close": 258.2027
+    },
+    {
+     "date": "2026-04-07",
+     "close": 252.8563
+    },
+    {
+     "date": "2026-04-08",
+     "close": 258.2426
+    },
+    {
+     "date": "2026-04-09",
+     "close": 259.8285
+    },
+    {
+     "date": "2026-04-10",
+     "close": 259.8186
+    },
+    {
+     "date": "2026-04-13",
+     "close": 258.5418
+    },
+    {
+     "date": "2026-04-14",
+     "close": 258.1728
+    },
+    {
+     "date": "2026-04-15",
+     "close": 265.7535
+    },
+    {
+     "date": "2026-04-16",
+     "close": 262.7311
+    },
+    {
+     "date": "2026-04-17",
+     "close": 269.5438
+    },
+    {
+     "date": "2026-04-20",
+     "close": 272.3566
+    },
+    {
+     "date": "2026-04-21",
+     "close": 265.4941
+    },
+    {
+     "date": "2026-04-22",
+     "close": 272.4764
+    },
+    {
+     "date": "2026-04-23",
+     "close": 272.7357
+    },
+    {
+     "date": "2026-04-24",
+     "close": 270.3717
+    },
+    {
+     "date": "2026-04-27",
+     "close": 266.9304
+    },
+    {
+     "date": "2026-04-28",
+     "close": 270.0226
+    },
+    {
+     "date": "2026-04-29",
+     "close": 269.4839
+    },
+    {
+     "date": "2026-04-30",
+     "close": 270.661
+    },
+    {
+     "date": "2026-05-01",
+     "close": 279.4286
+    },
+    {
+     "date": "2026-05-04",
+     "close": 276.127
+    },
+    {
+     "date": "2026-05-05",
+     "close": 283.4584
+    },
+    {
+     "date": "2026-05-06",
+     "close": 286.7799
+    },
+    {
+     "date": "2026-05-07",
+     "close": 286.7101
+    },
+    {
+     "date": "2026-05-08",
+     "close": 292.5752
+    },
+    {
+     "date": "2026-05-11",
+     "close": 292.2057
+    },
+    {
+     "date": "2026-05-12",
+     "close": 294.3223
+    },
+    {
+     "date": "2026-05-13",
+     "close": 298.3857
+    },
+    {
+     "date": "2026-05-14",
+     "close": 297.7268
+    },
+    {
+     "date": "2026-05-15",
+     "close": 299.7436
+    },
+    {
+     "date": "2026-05-18",
+     "close": 297.3574
+    },
+    {
+     "date": "2026-05-19",
+     "close": 298.4856
+    },
+    {
+     "date": "2026-05-20",
+     "close": 301.7603
+    },
+    {
+     "date": "2026-05-21",
+     "close": 304.4958
+    },
+    {
+     "date": "2026-05-22",
+     "close": 308.3196
+    },
+    {
+     "date": "2026-05-26",
+     "close": 307.8304
+    },
+    {
+     "date": "2026-05-27",
+     "close": 310.3463
+    },
+    {
+     "date": "2026-05-28",
+     "close": 312.0037
+    },
+    {
+     "date": "2026-05-29",
+     "close": 311.5544
+    },
+    {
+     "date": "2026-06-01",
+     "close": 305.8137
+    },
+    {
+     "date": "2026-06-02",
+     "close": 314.6893
+    },
+    {
+     "date": "2026-06-03",
+     "close": 309.7573
+    },
+    {
+     "date": "2026-06-04",
+     "close": 310.7257
+    },
+    {
+     "date": "2026-06-05",
+     "close": 306.842
+    },
+    {
+     "date": "2026-06-08",
+     "close": 301.0514
+    },
+    {
+     "date": "2026-06-09",
+     "close": 290.0792
+    },
+    {
+     "date": "2026-06-10",
+     "close": 291.1075
+    },
+    {
+     "date": "2026-06-11",
+     "close": 295.151
+    },
+    {
+     "date": "2026-06-12",
+     "close": 290.6583
+    },
+    {
+     "date": "2026-06-15",
+     "close": 295.9397
+    },
+    {
+     "date": "2026-06-16",
+     "close": 298.7551
+    },
+    {
+     "date": "2026-06-17",
+     "close": 295.4705
+    },
+    {
+     "date": "2026-06-18",
+     "close": 297.5272
+    },
+    {
+     "date": "2026-06-22",
+     "close": 296.5288
+    },
+    {
+     "date": "2026-06-23",
+     "close": 293.8231
+    },
+    {
+     "date": "2026-06-24",
+     "close": 292.6051
+    },
+    {
+     "date": "2026-06-25",
+     "close": 274.7042
+    },
+    {
+     "date": "2026-06-26",
+     "close": 283.3202
+    },
+    {
+     "date": "2026-06-29",
+     "close": 281.2835
+    },
+    {
+     "date": "2026-06-30",
+     "close": 288.8911
+    },
+    {
+     "date": "2026-07-01",
+     "close": 293.903
+    },
+    {
+     "date": "2026-07-02",
+     "close": 308.1299
+    },
+    {
+     "date": "2026-07-06",
+     "close": 312.1534
+    },
+    {
+     "date": "2026-07-07",
+     "close": 310.1566
+    },
+    {
+     "date": "2026-07-08",
+     "close": 312.8822
+    },
+    {
+     "date": "2026-07-09",
+     "close": 315.7076
+    },
+    {
+     "date": "2026-07-10",
+     "close": 314.8091
+    },
+    {
+     "date": "2026-07-13",
+     "close": 316.7959
+    },
+    {
+     "date": "2026-07-14",
+     "close": 314.3498
+    },
+    {
+     "date": "2026-07-15",
+     "close": 326.9694
+    },
+    {
+     "date": "2026-07-16",
+     "close": 332.72
+    },
+    {
+     "date": "2026-07-17",
+     "close": 333.1992
+    },
+    {
+     "date": "2026-07-20",
+     "close": 326.0608
+    },
+    {
+     "date": "2026-07-21",
+     "close": 327.209
+    },
+    {
+     "date": "2026-07-22",
+     "close": 325.362
+    },
+    {
+     "date": "2026-07-23",
+     "close": 321.1388
+    },
+    {
+     "date": "2026-07-24",
+     "close": 332.4804
+    },
+    {
+     "date": "2026-07-27",
+     "close": 336.3641
+    },
+    {
+     "date": "2026-07-28",
+     "close": 339.529
+    },
+    {
+     "date": "2026-07-29",
+     "close": 337.642
+    },
+    {
+     "date": "2026-07-30",
+     "close": 332.8897
+    },
+    {
+     "date": "2026-07-31",
+     "close": 308.4095
+    },
+    {
+     "date": "2026-08-03",
+     "close": 302.9284
+    },
+    {
+     "date": "2026-08-04",
+     "close": 308.8787
+    },
+    {
+     "date": "2026-08-05",
+     "close": 310.4961
+    },
+    {
+     "date": "2026-08-06",
+     "close": 311.9038
+    },
+    {
+     "date": "2026-08-07",
+     "close": 312.8223
+    },
+    {
+     "date": "2026-08-10",
+     "close": 308.026
+    },
+    {
+     "date": "2026-08-11",
+     "close": 304.6785
+    },
+    {
+     "date": "2026-08-12",
+     "close": 302.0205
+    },
+    {
+     "date": "2026-08-13",
+     "close": 305.0282
+    },
+    {
+     "date": "2026-08-14",
+     "close": 305.6977
+    },
+    {
+     "date": "2026-08-17",
+     "close": 305.358
+    },
+    {
+     "date": "2026-08-18",
+     "close": 309.7946
+    },
+    {
+     "date": "2026-08-19",
+     "close": 316.5894
+    },
+    {
+     "date": "2026-08-20",
+     "close": 311.0636
+    },
+    {
+     "date": "2026-08-21",
+     "close": 309.1151
+    },
+    {
+     "date": "2026-08-24",
+     "close": 310.1044
+    },
+    {
+     "date": "2026-08-25",
+     "close": 309.6647
+    },
+    {
+     "date": "2026-08-26",
+     "close": 313.212
+    },
+    {
+     "date": "2026-08-27",
+     "close": 314.3412
+    },
+    {
+     "date": "2026-08-28",
+     "close": 319.4573
+    },
+    {
+     "date": "2026-08-31",
+     "close": 316.6094
+    },
+    {
+     "date": "2026-09-01",
+     "close": 324.8831
+    },
+    {
+     "date": "2026-09-02",
+     "close": 324.7133
+    },
+    {
+     "date": "2026-09-03",
+     "close": 327.9608
+    },
+    {
+     "date": "2026-09-04",
+     "close": 319.7271
+    },
+    {
+     "date": "2026-09-08",
+     "close": 315.9799
+    },
+    {
+     "date": "2026-09-09",
+     "close": 315.1006
+    },
+    {
+     "date": "2026-09-10",
+     "close": 326.3221
+    },
+    {
+     "date": "2026-09-11",
+     "close": 332.0177
+    },
+    {
+     "date": "2026-09-14",
+     "close": 332.8271
+    },
+    {
+     "date": "2026-09-15",
+     "close": 331.0884
+    },
+    {
+     "date": "2026-09-16",
+     "close": 332.1576
+    },
+    {
+     "date": "2026-09-17",
+     "close": 336.7441
+    },
+    {
+     "date": "2026-09-18",
+     "close": 335.8748
+    },
+    {
+     "date": "2026-09-21",
+     "close": 338.7227
+    },
+    {
+     "date": "2026-09-22",
+     "close": 339.492
+    },
+    {
+     "date": "2026-09-23",
+     "close": 336.7641
+    },
+    {
+     "date": "2026-09-24",
+     "close": 335.665
+    },
+    {
+     "date": "2026-09-25",
+     "close": 340.8111
+    },
+    {
+     "date": "2026-09-28",
+     "close": 338.1431
+    },
+    {
+     "date": "2026-09-29",
+     "close": 329.1499
+    },
+    {
+     "date": "2026-09-30",
+     "close": 332.7672
+    },
+    {
+     "date": "2026-10-01",
+     "close": 330.0692
+    },
+    {
+     "date": "2026-10-02",
+     "close": 333.4366
+    },
+    {
+     "date": "2026-10-05",
+     "close": 332.6373
+    },
+    {
+     "date": "2026-10-06",
+     "close": 333.3767
+    },
+    {
+     "date": "2026-10-07",
+     "close": 336.4144
+    },
+    {
+     "date": "2026-10-08",
+     "close": 340.1616
+    },
+    {
+     "date": "2026-10-09",
+     "close": 336.3844
+    },
+    {
+     "date": "2026-10-12",
+     "close": 340.7111
+    },
+    {
+     "date": "2026-10-13",
+     "close": 341.0109
+    },
+    {
+     "date": "2026-10-14",
+     "close": 342.6996
+    },
+    {
+     "date": "2026-10-15",
+     "close": 341.7403
+    },
+    {
+     "date": "2026-10-16",
+     "close": 343.1992
+    },
+    {
+     "date": "2026-10-19",
+     "close": 342.6796
+    },
+    {
+     "date": "2026-10-20",
+     "close": 339.2422
+    },
+    {
+     "date": "2026-10-21",
+     "close": 343.7288
+    },
+    {
+     "date": "2026-10-22",
+     "close": 347.9556
+    },
+    {
+     "date": "2026-10-23",
+     "close": 347.466
+    },
+    {
+     "date": "2026-10-26",
+     "close": 343.6489
+    },
+    {
+     "date": "2026-10-27",
+     "close": 346.8365
+    },
+    {
+     "date": "2026-10-28",
+     "close": 343.5689
+    },
+    {
+     "date": "2026-10-29",
+     "close": 348.6451
+    },
+    {
+     "date": "2026-10-30",
+     "close": 344.3683
+    },
+    {
+     "date": "2026-11-02",
+     "close": 338.0631
+    },
+    {
+     "date": "2026-11-03",
+     "close": 331.648
+    },
+    {
+     "date": "2026-11-04",
+     "close": 349.2447
+    },
+    {
+     "date": "2026-11-05",
+     "close": 343.9087
+    },
+    {
+     "date": "2026-11-06",
+     "close": 342.11
+    },
+    {
+     "date": "2026-11-09",
+     "close": 350.4237
+    },
+    {
+     "date": "2026-11-10",
+     "close": 348.2454
+    },
+    {
+     "date": "2026-11-11",
+     "close": 355.36
+    },
+    {
+     "date": "2026-11-12",
+     "close": 354.88
+    }
    ]
   }
+ },
+ "news": {
+  "AAPL": [
+   {
+    "id": "ac3491ba-9fe9-44a7-ab9a-31ec94043090",
+    "content": {
+     "title": "Jensen Huang vs. Steve Jobs: Can Nvidia also thrive without its visionary?",
+     "summary": "Longtime Nvidia (NVDA) CEO Jensen Huang has resigned as chief executive following a string of personal controversies.\n\nYahoo Finance's Julie Hyman chats with SoFi (SOFI) chief market strategist Liz Thomas and Moor Insights &amp; Strategy founder Patrick Moorhead at Yahoo Finance's 2026 Invest conference to discuss the parallels between Steve Jobs for Apple (AAPL) and Huang for Nvidia.\n\n",
+     "pubDate": "2026-11-12T14:46:38Z",
+     "contentType": "VIDEO",
+     "provider": {
+      "displayName": "Yahoo Finance Video"
+     },
+     "canonicalUrl": {
+      "url": "https://finance.yahoo.com/video/jensen-huang-vs-steve-jobs-can-nvidia-also-thrive-without-its-visionary-144638496.html"
+     }
+    }
+   },
+   {
+    "id": "5a4d7716-3fbc-3e7e-b88d-edc5b7e1d5f0",
+    "content": {
+     "title": "Dow, S&P 500, Nasdaq Futures Edge Higher As Markets Attempt To Recover From Nvidia Rout: SLS, MSFT, CADL, MSTR In Focus",
+     "summary": "Nvidia\u2019s CEO scandal continued to rock markets on Thursday, with Jensen Huang resigning from his position following multiple reports of infidelity.",
+     "pubDate": "2026-11-13T03:07:45Z",
+     "contentType": "STORY",
+     "provider": {
+      "displayName": "Stocktwits"
+     },
+     "canonicalUrl": {
+      "url": "https://stocktwits.com/news-articles/markets/equity/dow-s-and-p-500-nasdaq-futures-edge-higher-as-markets-attempt-to-recover-from-nvidia-rout-sls-msft-cadl-mstr-in-focus/cNbb8QDR9OW"
+     }
+    }
+   },
+   {
+    "id": "7ed75457-903d-3026-b748-06d72ac97236",
+    "content": {
+     "title": "Jensen Huang to Rejoin Nvidia? Crypto Prediction Markets Weigh the Odds as Colette Kress Emerges as Interim CEO",
+     "summary": "Jensen Huang has announced his departure from NVIDIA Corp. (NASDAQ: NVDA), and cryptocurrency punters are skeptical that he will return anytime soon. Huang Gone for Good? Polygon (CRYPTO: POL)-based Polymarket currently sees only a 3% chance that Huang returns to...",
+     "pubDate": "2026-11-13T02:57:58Z",
+     "contentType": "STORY",
+     "provider": {
+      "displayName": "Benzinga Prediction Markets"
+     },
+     "canonicalUrl": {
+      "url": "https://www.benzinga.com/markets/prediction-markets/26/11/63228832/jensen-huang-to-rejoin-nvidia-crypto-prediction-markets-weigh-the-odds-as-colette-kress-emerges-as-interim-ceo?utm_source=yahooFinance&utm_campaign=partner_feed&utm_medium=referral"
+     }
+    }
+   },
+   {
+    "id": "fcc18b76-42e2-35d2-b189-a01e4032621c",
+    "content": {
+     "title": "Why the AI industry is so dependent on Nvidia\u2019s tech",
+     "summary": "On \u201cCNN Breaks It Down,\u201d Phil Mattingly asks Clare Duffy why Nvidia\u2019s dominance in AI chips could be at risk following the ouster of Jensen Huang as CEO. Stream new episodes of \u201cCNN Breaks It Down.\u201d Go here cnn.com/BreaksItDown to watch.",
+     "pubDate": "2026-11-13T02:34:53Z",
+     "contentType": "VIDEO",
+     "provider": {
+      "displayName": "CNN Business"
+     },
+     "canonicalUrl": {
+      "url": "https://www.cnn.com/2026/11/12/business/video/nvidia-market-2-bid-vod-hrzn?cid=external-feeds_iluminar_yahoo"
+     }
+    }
+   },
+   {
+    "id": "7a2a4b2d-bf92-3f28-a087-8404687fc104",
+    "content": {
+     "title": "Why Did AAPL, COST, JNJ Stocks Hit 52-Week Highs Today?",
+     "summary": "Investors rotated toward defensive stocks amid AI-sector uncertainty.",
+     "pubDate": "2026-11-13T02:32:55Z",
+     "contentType": "STORY",
+     "provider": {
+      "displayName": "Stocktwits"
+     },
+     "canonicalUrl": {
+      "url": "https://stocktwits.com/news-articles/markets/equity/why-did-aapl-cost-jnj-stocks-hit-52-week-highs-today/cNbbnh2R9Og"
+     }
+    }
+   },
+   {
+    "id": "d1aa50a5-bedb-3659-bed9-818dc053a2cb",
+    "content": {
+     "title": "Apple rises 26 places on the Roundtable 100",
+     "summary": "Apples jumps to No. 39 on the Roundtable 100.",
+     "pubDate": "2026-11-12T23:20:00Z",
+     "contentType": "STORY",
+     "provider": {
+      "displayName": "TheStreet"
+     },
+     "canonicalUrl": {
+      "url": "https://www.thestreet.com/crypto/markets/apple-rises-26-places-on-the-roundtable-100"
+     }
+    }
+   },
+   {
+    "id": "587ecde7-14f9-30c2-8fcc-40ca54afa1f1",
+    "content": {
+     "title": "Google's Next Big AI Push Has Apple in the Picture",
+     "summary": "A familiar driving experience is getting a major upgrade.",
+     "pubDate": "2026-11-12T23:04:45Z",
+     "contentType": "STORY",
+     "provider": {
+      "displayName": "GuruFocus.com"
+     },
+     "canonicalUrl": {
+      "url": "https://finance.yahoo.com/technology/ai/articles/googles-next-big-ai-push-230445065.html"
+     }
+    }
+   },
+   {
+    "id": "838df206-99b4-441a-9026-f38905527bb4",
+    "content": {
+     "title": "Nvidia market cap plunges $490 billion following former CEO Huang's affair scandals",
+     "summary": "Nvidia's market cap has plummeted nearly half a trillion dollars.",
+     "pubDate": "2026-11-12T22:44:12Z",
+     "contentType": "STORY",
+     "provider": {
+      "displayName": "Yahoo Finance"
+     },
+     "canonicalUrl": {
+      "url": "https://finance.yahoo.com/technology/article/nvidia-market-cap-plunges-490-billion-following-former-ceo-huangs-affair-scandals-224412004.html"
+     }
+    }
+   },
+   {
+    "id": "739b0ea2-b6ee-3878-ae7f-d38ec5bf08a6",
+    "content": {
+     "title": "China Renaissance Upgraded Apple (AAPL) to Buy. DZ Bank Cut It to Sell. Here\u2019s the Split",
+     "summary": "We just published a list of the 10 Unrivaled Stocks to Buy for the Next Decade and Apple (NASDAQ:AAPL) ranked 10th on this list. Wall Street had its worst day since April 2025 last Thursday. The Nasdaq Composite fell 5.5%, the S&P 500 dropped 4.4%, and the Philadelphia Semiconductor Index plunged 12.2%. Two worries drove [\u2026]",
+     "pubDate": "2026-11-12T22:33:45Z",
+     "contentType": "STORY",
+     "provider": {
+      "displayName": "Insider Monkey"
+     },
+     "canonicalUrl": {
+      "url": "https://finance.yahoo.com/markets/stocks/articles/china-renaissance-upgraded-apple-aapl-223345838.html"
+     }
+    }
+   },
+   {
+    "id": "9438e19c-ef64-3bea-816f-6532e33dc552",
+    "content": {
+     "title": "Why Tim Cook Shouldn\u2019t Run Nvidia",
+     "summary": "President Donald Trump says Tim Cook should become CEO of Nvidia. One analyst says there\u2019s a \u201cnear zero\u201d chance of it happening.",
+     "pubDate": "2026-11-12T22:31:00Z",
+     "contentType": "STORY",
+     "provider": {
+      "displayName": "Barrons.com"
+     },
+     "canonicalUrl": {
+      "url": "https://www.barrons.com/articles/nvidia-apple-jensen-huang-tim-cook-f258002a?siteid=yhoof2&yptr=yahoo"
+     }
+    }
+   }
+  ]
  }
 }

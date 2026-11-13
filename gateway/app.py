@@ -309,12 +309,7 @@ async def run_analysis(session_id: str, request: AnalysisRequest):
         session["mandate"] = mandate
         
         # 2. Run debate (coordinator already initialized)
-        debate_result = coordinator.run_debate(
-            rounds=3,
-            gamma_price=request.price,
-            gamma_eps=request.eps,
-            gamma_growth_rate=request.growth_rate
-        )
+        debate_result = coordinator.run_debate(rounds=3)
         
         session["debate_log"] = debate_result["log_file"]
         

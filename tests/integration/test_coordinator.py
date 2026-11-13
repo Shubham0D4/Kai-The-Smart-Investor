@@ -1,46 +1,70 @@
 """
-Integration test for Debate Coordinator.
+Integration test for Debate Coordinator (offline: recorded fixtures + fake LLM).
 """
 
-import pytest
+import inspect
+import json
 import os
-from coordinator.server import DebateCoordinator
-from coordinator.personas import RiskPersona
 
-def test_debate_flow(fake_llm):
-    coordinator = DebateCoordinator("AAPL", RiskPersona.ZEN, llm_client=fake_llm)
-    
-    # Run 2-round debate
-    result = coordinator.run_debate(
-        rounds=2,
-        gamma_price=100.0,
-        gamma_eps=5.0,
-        gamma_growth_rate=10.0
-    )
-    
+import pytest
+
+from coordinator.personas import RiskPersona
+from coordinator.server import DebateCoordinator
+
+
+def _load_log(result):
+    with open(result["log_file"]) as f:
+        return json.load(f)
+
+
+@pytest.fixture
+def cleanup():
+    files = []
+    yield files
+    for f in files:
+        if os.path.exists(f):
+            os.remove(f)
+
+
+def test_debate_flow(schema_llm, cleanup):
+    coordinator = DebateCoordinator("AAPL", RiskPersona.ZEN, llm_client=schema_llm)
+    result = coordinator.run_debate(rounds=2)
+    cleanup.append(result["log_file"])
+
     assert result["ticker"] == "AAPL"
     assert result["rounds_completed"] == 2
-    assert "log_file" in result
-    
-    # Verify file exists
-    import os
     assert os.path.exists(result["log_file"])
-    
-    # Cleanup
-    os.remove(result["log_file"])
 
-def test_debate_single_round(fake_llm):
-    coordinator = DebateCoordinator("AAPL", RiskPersona.ALPHA, llm_client=fake_llm)
+
+def test_round1_logs_structured_grounded_output(schema_llm, cleanup):
+    coordinator = DebateCoordinator("AAPL", RiskPersona.ALPHA, llm_client=schema_llm)
     result = coordinator.run_debate(rounds=1)
-    
-    assert result["rounds_completed"] == 1
-    # Gamma currently runs even without price/EPS inputs (see FIXES.md C2), so only
-    # assert on the agents that must always participate.
-    import json
-    with open(result["log_file"]) as f:
-        log = json.load(f)
-        round1_agents = log["rounds"][0]["agents"]
-        assert "charlie" in round1_agents
-        assert "delta" in round1_agents
-    
-    os.remove(result["log_file"])
+    cleanup.append(result["log_file"])
+
+    round1 = _load_log(result)["rounds"][0]["agents"]
+    assert set(round1) == {"charlie", "delta", "gamma"}
+    for name, entry in round1.items():
+        meta = entry["metadata"]
+        assert meta["output"]["agent"] == name
+        cited = {e for c in meta["output"]["claims"] for e in c.get("evidence", [])}
+        assert cited <= {e["id"] for e in meta["evidence"]}
+    # Gamma's DCF ran and was traced
+    formulas = {f["name"] for f in round1["gamma"]["metadata"].get("formulas", [])}
+    assert {"PE Ratio", "DCF Value per Share"} <= formulas
+
+
+def test_sec_down_fails_charlie_and_gamma_but_not_delta(schema_llm, failing_sources, cleanup):
+    failing_sources.add("sec_facts")
+    coordinator = DebateCoordinator("AAPL", RiskPersona.ZEN, llm_client=schema_llm)
+    result = coordinator.run_debate(rounds=1)
+    cleanup.append(result["log_file"])
+
+    round1 = _load_log(result)["rounds"][0]["agents"]
+    assert round1["charlie"]["status"] == "failed" and "HTTP 503" in round1["charlie"]["error"]
+    assert round1["gamma"]["status"] == "failed"
+    assert "output" in round1["delta"]["metadata"]
+
+
+def test_run_debate_takes_no_user_valuation_inputs():
+    params = set(inspect.signature(DebateCoordinator.run_debate).parameters)
+    assert not {"gamma_price", "gamma_eps", "gamma_growth_rate"} & params

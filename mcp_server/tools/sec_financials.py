@@ -1,0 +1,201 @@
+"""
+SEC XBRL company facts: annual financial statement numbers for Charlie and Gamma.
+
+Fetches https://data.sec.gov/api/xbrl/companyfacts/CIK##########.json and extracts the last
+five fiscal years of a fixed set of line items. Every value becomes an evidence record with
+the accession number of the filing it came from. Network or parsing failures return
+success=False with an explicit error; nothing is guessed.
+"""
+
+from datetime import date
+from typing import Dict, List, Optional, Tuple
+
+import httpx
+
+SEC_HEADERS = {
+    "User-Agent": "Kai-Economist contact@example.com",
+    "Accept-Encoding": "gzip, deflate",
+}
+TICKER_MAP_URL = "https://www.sec.gov/files/company_tickers.json"
+COMPANY_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
+ARCHIVE_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{accn_nodash}/"
+
+YEARS = 5
+
+# metric -> (label, unit, [us-gaap concepts in priority order], kind)
+# kind "duration" = income/cash-flow item over a fiscal year; "instant" = balance-sheet item at year end
+METRICS: Dict[str, Tuple[str, str, List[str], str]] = {
+    "revenue": ("Revenue", "USD", [
+        "RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet"], "duration"),
+    "gross_profit": ("Gross profit", "USD", ["GrossProfit"], "duration"),
+    "operating_income": ("Operating income", "USD", ["OperatingIncomeLoss"], "duration"),
+    "net_income": ("Net income", "USD", ["NetIncomeLoss"], "duration"),
+    "eps_diluted": ("Diluted EPS", "USD/shares", ["EarningsPerShareDiluted"], "duration"),
+    "operating_cash_flow": ("Operating cash flow", "USD", ["NetCashProvidedByUsedInOperatingActivities"], "duration"),
+    "capex": ("Capital expenditure", "USD", ["PaymentsToAcquirePropertyPlantAndEquipment"], "duration"),
+    "cash": ("Cash and cash equivalents", "USD", ["CashAndCashEquivalentsAtCarryingValue"], "instant"),
+    "long_term_debt": ("Long-term debt (incl. current portion)", "USD", ["LongTermDebt"], "instant"),
+    "commercial_paper": ("Commercial paper", "USD", ["CommercialPaper"], "instant"),
+    "equity": ("Stockholders' equity", "USD", ["StockholdersEquity"], "instant"),
+}
+
+
+class SECDataError(Exception):
+    pass
+
+
+def _get_json(url: str) -> Dict:
+    response = httpx.get(url, headers=SEC_HEADERS, timeout=20.0)
+    response.raise_for_status()
+    return response.json()
+
+
+def lookup_cik(ticker: str) -> str:
+    data = _get_json(TICKER_MAP_URL)
+    t = ticker.upper()
+    for entry in data.values():
+        if entry.get("ticker") == t:
+            return str(entry["cik_str"]).zfill(10)
+    raise SECDataError(f"ticker {t} not found in SEC ticker map")
+
+
+def _fiscal_label(end: str) -> str:
+    """FY label from the period end date. 52/53-week years ending in the first days of
+    January belong to the previous year."""
+    d = date.fromisoformat(end)
+    year = d.year - 1 if (d.month == 1 and d.day <= 7) else d.year
+    return f"FY{year}"
+
+
+def _days(start: str, end: str) -> int:
+    return (date.fromisoformat(end) - date.fromisoformat(start)).days
+
+
+def _annual_facts(concept: Dict, unit: str, kind: str) -> Dict[str, Dict]:
+    """end date -> the most recently filed 10-K fact for that period."""
+    out: Dict[str, Dict] = {}
+    for f in concept.get("units", {}).get(unit, []):
+        if f.get("form") != "10-K":
+            continue
+        if kind == "duration":
+            if "start" not in f or not 340 <= _days(f["start"], f["end"]) <= 380:
+                continue
+        elif "start" in f:
+            continue
+        prev = out.get(f["end"])
+        if prev is None or f.get("filed", "") > prev.get("filed", ""):
+            out[f["end"]] = f
+    return out
+
+
+def _record(metric: str, fact: Dict, cik: str, concept: str) -> Dict:
+    label, unit, _, _ = METRICS[metric] if metric in METRICS else (metric, "USD", [], "instant")
+    fy = _fiscal_label(fact["end"])
+    accn = fact.get("accn", "")
+    return {
+        "id": f"sec:{metric}:{fy}",
+        "label": f"{label} {fy}",
+        "value": float(fact["val"]),
+        "unit": unit,
+        "period": f"{fact.get('start', '')}..{fact['end']}".lstrip("."),
+        "source": f"SEC XBRL {concept}, {fact.get('form', '')} filed {fact.get('filed', '')} (accn {accn})",
+        "url": ARCHIVE_URL.format(cik=int(cik), accn_nodash=accn.replace("-", "")) if accn else None,
+    }
+
+
+def parse_company_facts(facts: Dict, cik: str, years: int = YEARS) -> Dict:
+    """Pure function: companyfacts JSON -> evidence records. Raises SECDataError if unusable."""
+    gaap = facts.get("facts", {}).get("us-gaap", {})
+    if not gaap:
+        raise SECDataError("company facts contain no us-gaap data")
+
+    per_metric: Dict[str, Dict[str, Tuple[Dict, str]]] = {}
+    for metric, (_, unit, concepts, kind) in METRICS.items():
+        merged: Dict[str, Tuple[Dict, str]] = {}
+        for concept in concepts:  # earlier concepts win; later ones fill gaps
+            if concept in gaap:
+                for end, f in _annual_facts(gaap[concept], unit, kind).items():
+                    merged.setdefault(end, (f, concept))
+        per_metric[metric] = merged
+
+    # Fallback for long-term debt: noncurrent + current when the total is not tagged
+    if "LongTermDebtNoncurrent" in gaap and "LongTermDebtCurrent" in gaap:
+        nc = _annual_facts(gaap["LongTermDebtNoncurrent"], "USD", "instant")
+        cur = _annual_facts(gaap["LongTermDebtCurrent"], "USD", "instant")
+        for end in set(nc) & set(cur):
+            if end not in per_metric["long_term_debt"]:
+                f = dict(nc[end]); f["val"] = nc[end]["val"] + cur[end]["val"]
+                per_metric["long_term_debt"][end] = (f, "LongTermDebtNoncurrent+LongTermDebtCurrent")
+
+    # Fiscal year ends come from the income-statement anchors
+    anchor_ends = set(per_metric["revenue"]) | set(per_metric["net_income"])
+    if not anchor_ends:
+        raise SECDataError("no annual (10-K) revenue or net income facts found")
+    fy_ends = sorted(anchor_ends)[-years:]
+
+    records: List[Dict] = []
+    for metric, by_end in per_metric.items():
+        for end in fy_ends:
+            if end in by_end:
+                f, concept = by_end[end]
+                records.append(_record(metric, f, cik, concept))
+
+    # Current shares outstanding from the cover page (dei)
+    dei = facts.get("facts", {}).get("dei", {}).get("EntityCommonStockSharesOutstanding", {})
+    share_facts = dei.get("units", {}).get("shares", [])
+    if share_facts:
+        latest = max(share_facts, key=lambda f: (f["end"], f.get("filed", "")))
+        records.append({
+            "id": "sec:shares_outstanding:latest",
+            "label": "Common shares outstanding",
+            "value": float(latest["val"]),
+            "unit": "shares",
+            "period": latest["end"],
+            "source": f"SEC XBRL dei:EntityCommonStockSharesOutstanding, {latest.get('form', '')} filed {latest.get('filed', '')}",
+            "url": None,
+        })
+
+    return {
+        "fiscal_years": [_fiscal_label(e) for e in fy_ends],
+        "records": records,
+    }
+
+
+def fetch_financial_statements(ticker: str, years: int = YEARS) -> Dict:
+    """
+    MCP tool: last `years` fiscal years of financial statement numbers from SEC XBRL.
+
+    Returns {success, ticker, cik, company_name, fiscal_years, records[]} or
+    {success: False, ticker, error}.
+    """
+    try:
+        cik = lookup_cik(ticker)
+        facts = _get_json(COMPANY_FACTS_URL.format(cik=cik))
+        parsed = parse_company_facts(facts, cik, years)
+        return {
+            "success": True,
+            "ticker": ticker.upper(),
+            "cik": cik,
+            "company_name": facts.get("entityName", ticker.upper()),
+            **parsed,
+        }
+    except httpx.HTTPStatusError as e:
+        return {"success": False, "ticker": ticker.upper(),
+                "error": f"SEC request failed: HTTP {e.response.status_code} for {e.request.url}"}
+    except (httpx.HTTPError, SECDataError, ValueError, KeyError) as e:
+        return {"success": False, "ticker": ticker.upper(), "error": f"SEC financial data unavailable: {e}"}
+
+
+def latest(records: List[Dict], metric: str) -> Optional[Dict]:
+    """Most recent fiscal-year record for a metric (records are ordered oldest first)."""
+    found = [r for r in records if r["id"].startswith(f"sec:{metric}:")]
+    return found[-1] if found else None
+
+
+def series(records: List[Dict], metric: str) -> List[Dict]:
+    return [r for r in records if r["id"].startswith(f"sec:{metric}:FY")]
+
+
+if __name__ == "__main__":
+    import json
+    print(json.dumps(fetch_financial_statements("AAPL"), indent=2)[:3000])

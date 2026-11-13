@@ -57,14 +57,8 @@ def main():
     
     coordinator = DebateCoordinator(args.ticker, persona)
     
-    # Simulate debate with some mock parameters for Gamma if needed
-    # but coordinator/server.py already handles missing data if we configured it in Phase 1
-    debate_result = coordinator.run_debate(
-        rounds=args.rounds,
-        gamma_price=145.0,  # Mock price for NVDA
-        gamma_eps=1.80,    # Mock EPS
-        gamma_growth_rate=45.0 # Mock Growth
-    )
+    # Gamma fetches its own price, EPS, cash flows and price history
+    debate_result = coordinator.run_debate(rounds=args.rounds)
     
     log_file = debate_result["log_file"]
     print(f"\n✅ [A2A] Debate complete. Log saved to: {log_file}")

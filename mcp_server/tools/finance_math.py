@@ -46,17 +46,20 @@ def calculate_dcf_value(
     free_cash_flows: List[float],
     discount_rate: float,
     terminal_growth_rate: float,
-    shares_outstanding: float
+    shares_outstanding: float,
+    net_debt: float = 0.0
 ) -> Dict:
     """
     Calculate Discounted Cash Flow (DCF) valuation.
-    
+
     Args:
         free_cash_flows: List of projected free cash flows for future years
         discount_rate: Discount rate (WACC) as decimal (e.g., 0.10 for 10%)
         terminal_growth_rate: Perpetual growth rate as decimal (e.g., 0.03 for 3%)
         shares_outstanding: Number of shares outstanding
-        
+        net_debt: Total debt minus cash; subtracted from enterprise value to get
+                  equity value (default 0 keeps the old behaviour)
+
     Returns:
         Dictionary with DCF analysis results
     """
@@ -82,12 +85,15 @@ def calculate_dcf_value(
     years = len(free_cash_flows)
     pv_terminal_value = terminal_value / ((1 + discount_rate) ** years)
     
-    # Calculate enterprise value and equity value per share
+    # Calculate enterprise value, then equity value per share
     enterprise_value = sum_pv_cash_flows + pv_terminal_value
-    value_per_share = enterprise_value / shares_outstanding
-    
+    equity_value = enterprise_value - net_debt
+    value_per_share = equity_value / shares_outstanding
+
     return {
         "enterprise_value": round(enterprise_value, 2),
+        "net_debt": round(net_debt, 2),
+        "equity_value": round(equity_value, 2),
         "value_per_share": round(value_per_share, 2),
         "pv_cash_flows": round(sum_pv_cash_flows, 2),
         "pv_terminal_value": round(pv_terminal_value, 2),
@@ -196,7 +202,8 @@ def calculate_valuation_metrics(
     free_cash_flows: Optional[List[float]] = None,
     discount_rate: float = 0.10,
     terminal_growth: float = 0.03,
-    shares_outstanding: Optional[float] = None
+    shares_outstanding: Optional[float] = None,
+    net_debt: float = 0.0
 ) -> Dict:
     """
     MCP tool to calculate comprehensive valuation metrics.
@@ -232,7 +239,8 @@ def calculate_valuation_metrics(
             free_cash_flows,
             discount_rate,
             terminal_growth,
-            shares_outstanding
+            shares_outstanding,
+            net_debt
         )
         results["dcf_analysis"] = dcf_results
     

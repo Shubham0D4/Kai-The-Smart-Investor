@@ -11,6 +11,8 @@ from typing import Any
 
 # Import tool functions
 from tools.sec_filings import fetch_filing_data
+from tools.sec_financials import fetch_financial_statements
+from tools.market_data import fetch_market_data
 from tools.news_stream import get_news_stream
 from tools.finance_math import calculate_valuation_metrics, calculate_risk_metrics
 from cache.semantic_cache import SemanticCache
@@ -61,10 +63,32 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
+            name="fetch_financial_statements",
+            description=(
+                "Fetch the last 5 fiscal years of financial statement numbers (revenue, margins, "
+                "EPS, cash flow, capex, cash, debt, equity, shares) from SEC XBRL company facts. "
+                "Each value is an evidence record with an ID and the filing it came from."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {"ticker": {"type": "string", "description": "Stock ticker symbol"}},
+                "required": ["ticker"]
+            }
+        ),
+        Tool(
+            name="fetch_market_data",
+            description="Fetch current price, shares outstanding and one year of daily closes (yfinance).",
+            inputSchema={
+                "type": "object",
+                "properties": {"ticker": {"type": "string", "description": "Stock ticker symbol"}},
+                "required": ["ticker"]
+            }
+        ),
+        Tool(
             name="get_news_stream",
             description=(
-                "Fetch recent news headlines for a stock ticker. "
-                "Returns articles with titles, URLs, publication dates, and sources. "
+                "Fetch recent news for a stock ticker from several free providers in parallel. "
+                "Returns merged articles with titles, summaries, URLs, dates and sources. "
                 "Used by the Sentiment Analysis Specialist (Delta) to gauge market narratives."
             ),
             inputSchema={
@@ -188,6 +212,10 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 filing_type=arguments.get("filing_type", "10-K"),
                 count=arguments.get("count", 3)
             )
+        elif name == "fetch_financial_statements":
+            result = fetch_financial_statements(ticker=arguments["ticker"])
+        elif name == "fetch_market_data":
+            result = fetch_market_data(ticker=arguments["ticker"])
         elif name == "get_news_stream":
             result = get_news_stream(
                 ticker=arguments["ticker"],

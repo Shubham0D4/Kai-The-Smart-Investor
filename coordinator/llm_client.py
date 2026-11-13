@@ -103,3 +103,61 @@ class MultiLLMClient:
             return # Should be unreachable if max_retries > 0 loop logic holds or raises
         else:
             raise ValueError("No LLM clients available or both failed.")
+
+
+class FakeResponse:
+    """Mimics the response object returned by MultiLLMClient."""
+
+    def __init__(self, text: str, prompt_tokens: int, completion_tokens: int):
+        self.text = text
+
+        class UsageMetadata:
+            prompt_token_count = prompt_tokens
+            candidates_token_count = completion_tokens
+            total_token_count = prompt_tokens + completion_tokens
+
+        self.usage_metadata = UsageMetadata()
+
+
+class FakeLLMClient:
+    """
+    Offline stand-in for MultiLLMClient: same constructor and generate_content
+    interface, returns canned text and never touches the network.
+
+    ``responses`` may be:
+      * None       - return DEFAULT_RESPONSE every time
+      * a str      - return that text every time
+      * a list     - return items in order, repeating the last one when exhausted
+      * a callable - called with the prompt, returns the text
+
+    Every prompt received is recorded in ``self.calls``.
+    """
+
+    DEFAULT_RESPONSE = "Canned analysis. Overall stance: Hold."
+
+    def __init__(
+        self,
+        system_instruction: str = "",
+        model_name: str = "fake-llm",
+        responses: Any = None,
+    ):
+        self.system_instruction = system_instruction
+        self.primary_model_name = model_name
+        self.responses = responses
+        self.calls: List[str] = []
+
+    def _next_text(self, prompt: str) -> str:
+        r = self.responses
+        if r is None:
+            return self.DEFAULT_RESPONSE
+        if callable(r):
+            return r(prompt)
+        if isinstance(r, str):
+            return r
+        idx = min(len(self.calls) - 1, len(r) - 1)
+        return r[idx]
+
+    def generate_content(self, prompt: str, max_retries: int = 3) -> FakeResponse:
+        self.calls.append(prompt)
+        text = self._next_text(prompt)
+        return FakeResponse(text, len(prompt.split()), len(text.split()))

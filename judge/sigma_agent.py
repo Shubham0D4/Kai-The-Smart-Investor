@@ -28,14 +28,14 @@ class SigmaAgent:
     then synthesizes final investment recommendation.
     """
     
-    def __init__(self):
-        """Initialize Sigma agent."""
+    def __init__(self, llm_client=None):
+        """Initialize Sigma agent. llm_client is injectable for tests."""
         self.name = "Sigma"
         self.role = "Final Decision Judge"
         
         # Initialize hybrid model with Sigma system instruction
         system_instruction = get_sigma_system_instruction()
-        self.model = MultiLLMClient(system_instruction=system_instruction)
+        self.model = llm_client if llm_client is not None else MultiLLMClient(system_instruction=system_instruction)
     
     def evaluate_debate(self, debate_log_path: str) -> Dict:
         """

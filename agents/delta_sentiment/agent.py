@@ -33,12 +33,14 @@ class DeltaAgent:
     Adjusts analysis based on risk persona (Zen vs Alpha).
     """
     
-    def __init__(self, persona: RiskPersona = RiskPersona.ALPHA):
+    def __init__(self, persona: RiskPersona = RiskPersona.ALPHA, llm_client=None):
         """
         Initialize Delta agent.
         
         Args:
             persona: Risk persona to apply (Zen or Alpha)
+            llm_client: Optional LLM client (same interface as MultiLLMClient);
+                        defaults to a real MultiLLMClient.
         """
         self.persona = persona
         self.name = "Delta"
@@ -46,7 +48,7 @@ class DeltaAgent:
         
         # Initialize hybrid model with system instruction
         system_instruction = get_delta_system_instruction(persona)
-        self.model = MultiLLMClient(system_instruction=system_instruction)
+        self.model = llm_client if llm_client is not None else MultiLLMClient(system_instruction=system_instruction)
     
     def analyze(self, ticker: str, days: int = 7, max_articles: int = 15) -> Dict:
         """

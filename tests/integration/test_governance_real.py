@@ -9,6 +9,7 @@ import time
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+@pytest.mark.live
 class TestGovernanceReal(unittest.TestCase):
     def setUp(self):
         # Ensure API key is present

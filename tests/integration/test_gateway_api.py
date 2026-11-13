@@ -109,13 +109,23 @@ async def test_run_analysis_logic(db_session, mock_full_stack):
 
 def test_hitl_approval_flow(client, db_session):
     # Setup session in waiting_approval state
-    from gateway.app import sessions
+    from gateway.app import sessions, hitl_manager
+    challenge = hitl_manager.create_step_up_challenge(
+        recommendation="Buy", confidence=90.0, ticker="AAA"
+    )
     sessions["sess_hitl"] = {
         "session_id": "sess_hitl",
         "status": AnalysisStatus.WAITING_APPROVAL,
         "user_id": "u1",
-        "challenge_id": "chal_1",
-        "alpha_packet": {"packet_id": "p1", "recommendation": "Buy"} # Mock packet
+        "challenge_id": challenge.challenge_id,
+        "alpha_packet": {
+            "packet_id": "p1", "mandate_id": "m1", "ticker": "AAA", "persona": "zen",
+            "recommendation": "Buy", "confidence": 90.0,
+            "quality_scores": {"faithfulness": 90.0, "consistency": 90.0, "overall": 90.0},
+            "debate_summary": {"rounds": 2, "agents": ["charlie"], "quality": 90.0},
+            "key_risks": [], "debate_log": "log.json", "timestamp": "now",
+            "signature": "sig", "public_key": "pk", "verification_url": "http://x",
+        },
     }
     
     # Register/Login Analyst
@@ -125,7 +135,7 @@ def test_hitl_approval_flow(client, db_session):
     
     # Approve
     approve_res = client.post("/api/v1/approve/sess_hitl", json={
-        "challenge_id": "chal_1",
+        "challenge_id": challenge.challenge_id,
         "user_confirmation": "approved"
     }, headers=headers)
     

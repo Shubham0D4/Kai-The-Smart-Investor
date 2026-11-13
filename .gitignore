@@ -36,6 +36,9 @@ env/
 .env
 .env.local
 
+# Keys (never commit)
+*.pem
+
 # Data & Databases
 users.db
 kai_gateway.db

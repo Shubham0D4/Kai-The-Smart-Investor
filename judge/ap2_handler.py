@@ -23,11 +23,23 @@ class AP2Handler:
         """
         Initialize AP2 handler.
         
+        Key location precedence: ``private_key_path`` argument, then the
+        AP2_PRIVATE_KEY_PATH env var, then ./ap2_private_key.pem. The public key
+        path comes from AP2_PUBLIC_KEY_PATH, or is derived from the private path.
+        If no key exists at that path, a new pair is generated on first run.
+        Key files must never be committed (*.pem is gitignored).
+
         Args:
             private_key_path: Path to Ed25519 private key file (optional)
         """
-        self.private_key_path = private_key_path or "ap2_private_key.pem"
-        self.public_key_path = self.private_key_path.replace("private", "public")
+        self.private_key_path = (
+            private_key_path
+            or os.getenv("AP2_PRIVATE_KEY_PATH")
+            or "ap2_private_key.pem"
+        )
+        self.public_key_path = os.getenv("AP2_PUBLIC_KEY_PATH") or self._derive_public_path(
+            self.private_key_path
+        )
         
         # Load or generate keys
         if os.path.exists(self.private_key_path):
@@ -35,6 +47,16 @@ class AP2Handler:
         else:
             self.private_key, self.public_key = self._generate_keys()
     
+    @staticmethod
+    def _derive_public_path(private_path: str) -> str:
+        """Derive the public key path without ever returning the private path."""
+        directory, name = os.path.split(private_path)
+        if "private" in name:
+            derived = name.replace("private", "public")
+        else:
+            derived = name + ".pub"
+        return os.path.join(directory, derived)
+
     def _generate_keys(self):
         """Generate new Ed25519 key pair."""
         private_key = ed25519.Ed25519PrivateKey.generate()
@@ -52,7 +74,14 @@ class AP2Handler:
             format=serialization.PublicFormat.SubjectPublicKeyInfo
         )
         
-        with open(self.private_key_path, 'wb') as f:
+        for path in (self.private_key_path, self.public_key_path):
+            parent = os.path.dirname(path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+
+        # Create the private key owner-readable only (0600)
+        fd = os.open(self.private_key_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, 'wb') as f:
             f.write(private_pem)
         
         with open(self.public_key_path, 'wb') as f:

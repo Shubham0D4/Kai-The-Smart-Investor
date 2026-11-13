@@ -31,13 +31,16 @@ class DebateCoordinator:
     Implements 3-round round-robin with cross-critique.
     """
     
-    def __init__(self, ticker: str, persona: RiskPersona = RiskPersona.ZEN):
+    def __init__(self, ticker: str, persona: RiskPersona = RiskPersona.ZEN, llm_client=None):
         """
         Initialize debate coordinator.
         
         Args:
             ticker: Stock ticker to analyze
             persona: Risk persona for agents
+            llm_client: Optional LLM client shared by all agents and Sigma
+                        (e.g. FakeLLMClient in tests). Default: one real
+                        MultiLLMClient per agent.
         """
         self.ticker = ticker.upper()
         self.persona = persona
@@ -51,13 +54,13 @@ class DebateCoordinator:
         # Governance
         self.TOKEN_LIMIT = 50000
         self.total_tokens_used = 0
-        self.sigma = SigmaAgent()  # Circuit Breaker Judge
+        self.sigma = SigmaAgent(llm_client=llm_client)  # Circuit Breaker Judge
         
         # Initialize agents
         print(f"[COORDINATOR] Initializing agents with {persona.value} persona...")
-        self.charlie = CharlieAgent(persona=persona)
-        self.delta = DeltaAgent(persona=persona)
-        self.gamma = GammaAgent(persona=persona)
+        self.charlie = CharlieAgent(persona=persona, llm_client=llm_client)
+        self.delta = DeltaAgent(persona=persona, llm_client=llm_client)
+        self.gamma = GammaAgent(persona=persona, llm_client=llm_client)
         
         print(f"[COORDINATOR] A2A Handshake complete")
         print(f"[COORDINATOR] Agents ready: Charlie, Delta, Gamma")

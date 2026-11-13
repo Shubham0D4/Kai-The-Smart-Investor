@@ -72,8 +72,8 @@ graph TD
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/Shubham0D4/Kai---The-Economist.git
-   cd kai-economist
+   git clone https://github.com/Shubham0D4/Kai-The-Smart-Investor.git
+   cd Kai-The-Smart-Investor
    ```
 
 2. **Create and activate a virtual environment**:
@@ -88,12 +88,13 @@ graph TD
    ```
 
 4. **Configure Environment Variables**:
-   Create a `.env` file in the root directory:
+   Copy the example file and fill it in:
    ```bash
-   # Create .env manually or copy from example if available
-   touch .env
+   cp .env.example .env
    ```
-   Add your keys to `.env`:
+   `GATEWAY_SECRET_KEY` is **required** (the gateway refuses to start without it).
+   Generate one with `python -c "import secrets; print(secrets.token_hex(32))"`.
+   Example contents:
    ```env
    # LLM Providers
    GOOGLE_API_KEY=your_google_key_here
@@ -105,6 +106,14 @@ graph TD
    
    # Security
    GATEWAY_SECRET_KEY=your_secure_random_string
+
+   # AP2 signing key (generated on first run if missing; *.pem is gitignored)
+   AP2_PRIVATE_KEY_PATH=ap2_private_key.pem
+   ```
+
+5. **Run the tests** (offline: fake LLM + recorded fixtures, no keys needed):
+   ```bash
+   pytest            # add --live to include tests that need network/API keys
    ```
 
 ### 2. Frontend Setup

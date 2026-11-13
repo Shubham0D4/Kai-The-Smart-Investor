@@ -6,6 +6,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional
 
+from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
@@ -15,8 +16,15 @@ from sqlalchemy.orm import Session
 from gateway import models, schema
 from gateway.database import get_db
 
-# Configuration (In production, use secure environment variables)
-SECRET_KEY = os.getenv("GATEWAY_SECRET_KEY", "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7")
+load_dotenv()
+
+# Configuration. The JWT signing secret has no default: refuse to start without it.
+SECRET_KEY = os.getenv("GATEWAY_SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "GATEWAY_SECRET_KEY is not set. Set it in your environment or .env file "
+        "(generate one with: python -c \"import secrets; print(secrets.token_hex(32))\")."
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

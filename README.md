@@ -6,7 +6,7 @@
 
 - Use cases and walkthroughs: [USECASES.md](USECASES.md)
 - Design decisions and rationale: [DESIGN.md](DESIGN.md)
-- Known issues and the engineering log: [FIXES.md](FIXES.md)
+- Test results: [TESTRESULTS.md](TESTRESULTS.md)
 
 ---
 

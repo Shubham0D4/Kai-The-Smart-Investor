@@ -109,7 +109,9 @@ def build_debate_view(log: Dict[str, Any]) -> DebateView:
         debate_id=log.get("debate_id", ""), ticker=log.get("ticker", t.ticker), persona=log.get("persona", ""),
         rounds_started=rounds_started, finished=finished, outcome=outcome,
         total_tokens=meta.get("total_tokens", 0), token_limit=meta.get("token_limit"),
-        agents=agents, llm_calls=[LlmCall(**c) for c in t.calls], events=build_events(log), quant_report=quant,
+        agents=agents, llm_calls=[LlmCall(**c) for c in t.calls], token_budget=meta.get("token_budget"),
+        market_snapshot=log.get("market_snapshot"),
+        events=build_events(log), quant_report=quant,
     )
 
 

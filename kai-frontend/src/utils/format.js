@@ -39,6 +39,7 @@ export const AGENTS = {
     charlie: { name: 'Charlie', role: 'Fundamentals · SEC filings' },
     delta: { name: 'Delta', role: 'Sentiment · news' },
     gamma: { name: 'Gamma', role: 'Valuation & risk' },
+    vega: { name: 'Vega', role: 'Catalysts & options' },
 };
 export const AGENT_IDS = Object.keys(AGENTS);
 

@@ -3,24 +3,27 @@ Debate transcript (DESIGN.md §3): the coordinator's single record of what every
 
 Calls to the LLM stay stateless; instead every round-2 and round-3 prompt is built from this
 transcript in full (nothing truncated): the agent's own earlier output, its own evidence, and
-the other agents' complete structured claims and critiques.
+the other agents' complete structured claims and critiques, in Kai's compact wire format
+(compact JSON, one line per evidence record). Every prompt starts with the agent's evidence
+block, identical in all three rounds, so providers that cache prompt prefixes can reuse it.
 """
 
 import json
 from typing import TYPE_CHECKING, Dict, List, Optional, Set
 
 from agents.schema import (
-    AgentOutput, CritiqueOutput, EvidenceRecord, FinalOutput, format_evidence, parse_model,
+    USAGE_KEYS, AgentOutput, CritiqueOutput, EvidenceRecord, FinalOutput, compact_json, critique_json_schema,
+    evidence_block, final_json_schema, format_evidence, parse_model,
 )
 
 if TYPE_CHECKING:
     from judge.verifier import AgentVerification
 
-AGENT_ORDER = ["charlie", "delta", "gamma"]
+AGENT_ORDER = ["charlie", "delta", "gamma", "vega"]
 
 
 def _dump(model) -> str:
-    return json.dumps(model.model_dump(by_alias=True), indent=1)
+    return compact_json(model)
 
 
 class Transcript:
@@ -35,6 +38,7 @@ class Transcript:
         self.calls: List[Dict] = []          # one entry per LLM call (agent, round, tokens)
         self.verification: Dict[str, "AgentVerification"] = {}   # round-1 verifier reports
         self.dropped: Dict[str, str] = {}    # agent -> reason it was removed from the debate
+        self.notes: List[str] = []           # repairs made to accepted replies (shown as warnings)
         self.rounds_started = 0
 
     # ------------------------------------------------------------------ recording
@@ -61,9 +65,14 @@ class Transcript:
     def add_round3(self, agent: str, output: FinalOutput):
         self.round3[agent] = output
 
-    def record_call(self, agent: str, round_number: int, token_usage: Dict, ok: bool):
-        self.calls.append({"agent": agent, "round": round_number, "ok": ok,
-                           "total_tokens": token_usage.get("total_tokens", 0)})
+    def record_call(self, agent: str, round_number: int, token_usage: Dict, ok: bool,
+                    models: Optional[List[str]] = None, error_type: Optional[str] = None,
+                    repaired_from: Optional[str] = None):
+        """One entry per agent step (all attempts of it), with tokens split by kind."""
+        entry = {"agent": agent, "round": round_number, "ok": ok, "models": list(models or []),
+                 "error_type": error_type, "repaired_from": repaired_from}
+        entry.update({k: token_usage.get(k, 0) for k in USAGE_KEYS})
+        self.calls.append(entry)
 
     # ------------------------------------------------------------------ queries
 
@@ -93,6 +102,29 @@ class Transcript:
                         out.append((f"{critic}.{k.id}", critic, k))
         return out
 
+    def round3_refs(self, agent: str) -> Set[str]:
+        """Refs an agent may name in round-3 changed_by: the others' claims and the critiques it received."""
+        return self.claim_refs(self.others(agent)) | {ref for ref, _, _ in self.critiques_of(agent)}
+
+    def stance_grounds(self, agent: str) -> Set[str]:
+        """Critiques that dispute this agent's own claims: the only refs that can justify a change
+        of stance (with its own failed claims). Other domains are weighed by the judge."""
+        return {ref for ref, _, k in self.critiques_of(agent) if k.verdict == "dispute"}
+
+    @staticmethod
+    def return_window(evidence_id: str) -> Optional[str]:
+        """The window of a price-change record ('1m', '1y', '52w-high', ...), else None."""
+        if evidence_id.startswith("mkt:return_"):
+            return evidence_id[len("mkt:return_"):]
+        if evidence_id == "mkt:drawdown_from_52w_high":
+            return "52w-high"
+        return None
+
+    def _claim_windows(self, ref: str) -> Set[str]:
+        agent, cid = ref.split(".", 1)
+        claim = next((c for c in self.round1[agent].claims if c.id == cid), None)
+        return {w for e in getattr(claim, "evidence", []) for w in [self.return_window(e)] if w}
+
     def _cited_evidence(self, agent: str) -> List[EvidenceRecord]:
         """Records another agent cited, so a reader can see what its evidence ids mean."""
         cited = set(self.round1[agent].evidence_ids())
@@ -108,6 +140,7 @@ class Transcript:
             "round3": {a: o.model_dump(by_alias=True) for a, o in self.round3.items()},
             "verification": {a: v.model_dump() for a, v in self.verification.items()},
             "dropped": dict(self.dropped),
+            "notes": list(self.notes),
             "llm_calls": self.calls,
         }
 
@@ -125,6 +158,7 @@ class Transcript:
         t.verification = {a: AgentVerification.model_validate(v)
                           for a, v in data.get("verification", {}).items()}
         t.dropped = dict(data.get("dropped", {}))
+        t.notes = list(data.get("notes", []))
         t.calls = list(data.get("llm_calls", []))
         return t
 
@@ -162,13 +196,12 @@ class Transcript:
     def round2_prompt(self, agent: str) -> str:
         targets = sorted(self.claim_refs(self.others(agent)))
         return f"""
+{evidence_block(self.evidence[agent])}
+
 ROUND 2 - CROSS-EXAMINATION for {self.ticker}. You are {agent}.
 
 ## Your round-1 output (full)
 {_dump(self.round1[agent])}
-
-## Your evidence (the only ids you may cite)
-{format_evidence(self.evidence[agent])}
 
 ## The other agents' claims
 {self._others_section(agent, include_critiques=False)}
@@ -182,14 +215,9 @@ you dispute, qualify or support them, and back every critique with at least one 
 evidence list above. Critique at least one claim of each other agent: {', '.join(self.others(agent))}.
 Claims you may target: {', '.join(targets)}
 
-Return ONLY a JSON object, no prose and no code fences:
-{{
-  "agent": "{agent}", "round": 2,
-  "critiques": [
-    {{"id": "K1", "target": "<agent>.<claim id>", "verdict": "dispute" | "qualify" | "support",
-      "argument": "<why, referring to your evidence>", "evidence": ["<id from your evidence>"]}}
-  ]
-}}
+Return ONLY a JSON object (the schema is enforced):
+{{"agent": "{agent}", "round": 2, "critiques": [{{"id": "K1", "target": "<agent>.<claim id>",
+ "verdict": "dispute"|"qualify"|"support", "argument": "<why, from your evidence>", "evidence": ["<your id>"]}}]}}
 Use only your evidence and the claims shown. Do not use outside knowledge.
 """.strip()
 
@@ -200,10 +228,13 @@ Use only your evidence and the claims shown. Do not use outside knowledge.
             for ref, _, k in received) or "- none"
         own_r2 = (_dump(self.round2[agent]) if agent in self.round2
                   else "(you produced no valid critiques in round 2)")
-        refs = sorted(self.claim_refs(self.others(agent)) | self.critique_refs(self.others(agent)))
+        refs = sorted(self.round3_refs(agent))
+        grounds = sorted(self.stance_grounds(agent))
         r1 = self.round1[agent]
         failed = self.failed_claims(agent)
         return f"""
+{evidence_block(self.evidence[agent])}
+
 ROUND 3 - FINAL POSITION for {self.ticker}. You are {agent}.
 
 ## Your round-1 output (full)
@@ -213,11 +244,8 @@ Your round-1 stance: {r1.stance}
 ## Your round-2 critiques (full)
 {own_r2}
 
-## Your evidence (the only ids your claims may cite)
-{format_evidence(self.evidence[agent])}
-
-## The other agents' claims and critiques
-{self._others_section(agent, include_critiques=True)}
+## The other agents' claims
+{self._others_section(agent, include_critiques=False)}
 
 ## Critiques of your claims (answer every one)
 {received_lines}
@@ -228,27 +256,50 @@ Your claims that FAILED verification: {', '.join(failed) or 'none'}
 Each of them needs a `changes` entry: revise or withdraw it, or explain why you keep it.
 
 ## Task
-Give your final stance and claims. Say which of the other agents' claims or critiques changed
-your view and why, and what happened to each of your own round-1 claims that was critiqued.
+Give your final stance and claims, in your own lane. Say what happened to each of your round-1
+claims that was critiqued or failed verification. Change your STANCE only if a dispute of your
+own claims ({', '.join(grounds) or 'none received'}) or the verifier showed your evidence was
+wrong; other domains pointing the other way are weighed by the judge, not by you.
 
-Return ONLY a JSON object, no prose and no code fences:
-{{
-  "agent": "{agent}", "round": 3,
-  "stance": "bullish" | "neutral" | "bearish",
-  "confidence": <number 0-100>,
-  "claims": [ <same claim format as round 1, citing only your evidence ids> ],
-  "risks": ["<risk>", ...],
-  "changes": [
-    {{"claim": "<your round-1 claim id>", "action": "kept" | "revised" | "withdrawn",
-      "reason": "<why>", "in_response_to": ["<critique ref, e.g. delta.K1>"]}}
-  ],
-  "changed_by": [ {{"ref": "<agent>.<claim or critique id>", "reason": "<how it changed your view>"}} ],
-  "stance_change": {{"from": "{r1.stance}", "to": "<final stance>", "reason": "<why, or empty if unchanged>"}}
-}}
+Return ONLY a JSON object (the schema is enforced):
+{{"agent": "{agent}", "round": 3, "stance": "bullish"|"neutral"|"bearish", "confidence": 0-100,
+ "claims": [<round-1 claim format, citing only your evidence ids>], "risks": ["<risk>"],
+ "changes": [{{"claim": "<your round-1 claim id>", "action": "kept"|"revised"|"withdrawn", "reason": "<why>", "in_response_to": ["<critique ref, e.g. delta.K1>"]}}],
+ "changed_by": [{{"ref": "<agent>.<claim or critique id>", "reason": "<how it changed your view>"}}],
+ "stance_change": {{"from": "{r1.stance}", "to": "<final stance>", "reason": "<why, or empty if unchanged>"}}}}
 Rules: every critique listed above must appear in some change's in_response_to. If your stance
-changed, list at least one entry in changed_by. Refs you may use in changed_by: {', '.join(refs) or 'none'}.
+changed, list in changed_by at least one of: {', '.join(grounds) or 'none (so keep your stance unless your claims failed verification)'}.
+Refs you may use in changed_by: {', '.join(refs) or 'none'}.
 Use only the material shown. Do not use outside knowledge.
 """.strip()
+
+    # ------------------------------------------------------------------ schemas and repair hints
+
+    def round2_schema(self, agent: str) -> Dict:
+        return critique_json_schema(agent, sorted(self.claim_refs(self.others(agent))),
+                                    [e.id for e in self.evidence[agent]])
+
+    def round3_schema(self, agent: str) -> Dict:
+        received = sorted(ref for ref, _, _ in self.critiques_of(agent))
+        refs = sorted(self.round3_refs(agent))
+        return final_json_schema(agent, self.evidence[agent], [c.id for c in self.round1[agent].claims],
+                                 received, refs, self.round1[agent].stance)
+
+    def round2_hint(self, agent: str) -> str:
+        return (f"Claims you may target: {', '.join(sorted(self.claim_refs(self.others(agent))))}. "
+                f"Critique at least one claim of each of: {', '.join(self.others(agent))}.")
+
+    def round3_hint(self, agent: str) -> str:
+        received = sorted(ref for ref, _, _ in self.critiques_of(agent))
+        refs = sorted(self.round3_refs(agent))
+        return (f"Your round-1 claim ids: {', '.join(c.id for c in self.round1[agent].claims)}. "
+                f"Critiques you must answer in changes.in_response_to: {', '.join(received) or 'none'}. "
+                f"Claims that failed verification and need a changes entry: "
+                f"{', '.join(self.failed_claims(agent)) or 'none'}. "
+                f"Refs allowed in changed_by: {', '.join(refs) or 'none'}. "
+                f"A stance change needs one of: {', '.join(sorted(self.stance_grounds(agent))) or 'none'} "
+                f"(or your own failed claims); otherwise keep your round-1 stance. "
+                f"stance_change.from must be {self.round1[agent].stance!r}.")
 
     # ------------------------------------------------------------------ validation
 
@@ -259,16 +310,29 @@ Use only the material shown. Do not use outside knowledge.
         others = self.others(agent)
         allowed = self.claim_refs(others)
         own_ids = {e.id for e in self.evidence[agent]}
+        problems: Dict[str, str] = {}
         for k in out.critiques:
             if k.target not in allowed:
-                raise ValueError(f"critique {k.id} targets {k.target!r}, which is not another agent's claim; "
-                                 f"allowed: {sorted(allowed)}")
-            bad = [e for e in k.evidence if e not in own_ids]
-            if bad:
-                raise ValueError(f"critique {k.id} cites evidence that is not yours: {bad}")
-        missing = set(others) - {k.target.split(".", 1)[0] for k in out.critiques}
+                problems[k.id] = (f"critique {k.id} targets {k.target!r}, which is not another agent's claim; "
+                                  f"allowed: {sorted(allowed)}")
+            elif [e for e in k.evidence if e not in own_ids]:
+                problems[k.id] = (f"critique {k.id} cites evidence that is not yours: "
+                                  f"{[e for e in k.evidence if e not in own_ids]}")
+            elif k.verdict == "dispute":
+                theirs = self._claim_windows(k.target)
+                mine = {w for e in k.evidence for w in [self.return_window(e)] if w}
+                if theirs and mine and not theirs & mine:
+                    problems[k.id] = (f"critique {k.id} disputes a {'/'.join(sorted(theirs))} price move with a "
+                                      f"{'/'.join(sorted(mine))} one: different windows do not contradict each other")
+        kept = [k for k in out.critiques if k.id not in problems]
+        missing = set(others) - {k.target.split(".", 1)[0] for k in kept}
         if missing:
-            raise ValueError(f"no critique of: {sorted(missing)}")
+            raise ValueError("; ".join(problems.values()) or f"no critique of: {sorted(missing)}")
+        if problems:
+            # Salvage instead of a repair call: the remaining critiques still cover every other
+            # agent, so drop the invalid ones and say so.
+            self.notes.append(f"{agent} round 2: dropped invalid critique(s): {'; '.join(problems.values())}")
+            out = out.model_copy(update={"critiques": kept})
         return out
 
     def validate_round3(self, agent: str, text: str) -> FinalOutput:
@@ -295,7 +359,7 @@ Use only the material shown. Do not use outside knowledge.
         unaddressed = set(self.failed_claims(agent)) - {ch.claim for ch in out.changes}
         if unaddressed:
             raise ValueError(f"no changes entry for your claims that failed verification: {sorted(unaddressed)}")
-        refs = self.claim_refs(self.others(agent)) | self.critique_refs(self.others(agent))
+        refs = self.round3_refs(agent)
         unknown = [v.ref for v in out.changed_by if v.ref not in refs]
         if unknown:
             raise ValueError(f"changed_by refers to unknown refs {unknown}")
@@ -305,4 +369,12 @@ Use only the material shown. Do not use outside knowledge.
                              f"to your final stance {out.stance!r}")
         if sc.from_ != sc.to and (not sc.reason or not out.changed_by):
             raise ValueError("stance changed: give a reason and at least one changed_by entry")
+        if sc.from_ != sc.to and not self.failed_claims(agent):
+            grounds = self.stance_grounds(agent)
+            if not grounds & {v.ref for v in out.changed_by}:
+                raise ValueError(
+                    f"stance changed from {sc.from_} to {sc.to} without a factual correction of your own claims. "
+                    f"Stay in your lane: only a dispute of your claims ({', '.join(sorted(grounds)) or 'none received'}) "
+                    f"or your own failed claims can change your stance; the judge weighs the other domains. "
+                    f"Keep stance {sc.from_!r} or cite one of those disputes in changed_by.")
         return out

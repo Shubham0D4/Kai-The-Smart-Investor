@@ -1,11 +1,11 @@
 import React from 'react';
-import { Activity, Code, Cpu, User } from 'lucide-react';
+import { Activity, CalendarClock, Code, Cpu, User } from 'lucide-react';
 import { useCommittee } from '../../context/committee';
 import Chip from '../../components/Chip';
 import { StanceBadge } from './AgentPanel';
 import { AGENTS, AGENT_IDS, pct } from '../../utils/format';
 
-const ICONS = { charlie: User, delta: Activity, gamma: Code, sigma: Cpu };
+const ICONS = { charlie: User, delta: Activity, gamma: Code, vega: CalendarClock, sigma: Cpu };
 
 // label, dot colour
 const STATE = {
@@ -56,7 +56,7 @@ const AgentStatusGrid = () => {
                     const final = agent?.round3 || agent?.round1;
                     const verification = agent?.final_verification || agent?.verification;
                     return (
-                        <div key={id} className="col-6 col-lg-3">
+                        <div key={id} className="col-6 col-md-4 col-xl">
                             <Member id={id} name={AGENTS[id].name} role={AGENTS[id].role}
                                 state={agent?.state || 'waiting'} tooltip={agent?.error || agent?.dropped_reason}>
                                 {final && (
@@ -69,7 +69,7 @@ const AgentStatusGrid = () => {
                         </div>
                     );
                 })}
-                <div className="col-6 col-lg-3">
+                <div className="col-6 col-md-4 col-xl">
                     <Member id="sigma" name="Sigma" role="Judge · computes the verdict" state={sigmaState}>
                         {sigma && <div className="mt-2"><Chip tone="accent">{sigma.final_recommendation.recommendation}</Chip></div>}
                     </Member>

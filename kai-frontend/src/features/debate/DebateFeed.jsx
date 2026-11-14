@@ -6,8 +6,8 @@ import { useCommittee } from '../../context/committee';
 import Chip from '../../components/Chip';
 import { clock } from '../../utils/format';
 
-const AGENT_LABEL = { charlie: 'Charlie', delta: 'Delta', gamma: 'Gamma', sigma: 'Sigma', system: 'System' };
-const AGENT_TONE = { charlie: 'accent', delta: 'info', gamma: 'pos', sigma: 'warn', system: 'neutral' };
+const AGENT_LABEL = { charlie: 'Charlie', delta: 'Delta', gamma: 'Gamma', vega: 'Vega', sigma: 'Sigma', system: 'System' };
+const AGENT_TONE = { charlie: 'accent', delta: 'info', gamma: 'pos', vega: 'plain', sigma: 'warn', system: 'neutral' };
 
 const AgentBadge = ({ agent }) => (
     <Chip tone={AGENT_TONE[agent] || 'neutral'} className="justify-content-center" style={{ minWidth: 64 }}>

@@ -233,6 +233,9 @@ class AP2Handler:
                 "quant_agreement": final.get("quant_agreement"),
                 "contradiction_factor": final.get("contradiction_factor"),
                 "contradictions": final.get("contradictions", []),
+                "hold_conviction": final.get("hold_conviction"),
+                "coverage": final.get("coverage"),
+                "suggestions": final.get("suggestions", []),
             },
             # Full quant report (DESIGN.md §10), inside the signed payload
             "quant_report": sigma_evaluation.get("quant_report"),
@@ -320,7 +323,8 @@ class AP2Handler:
             "quality": sigma_evaluation["evaluation"]["overall_quality"]
         }
     
-    def save_alpha_packet(self, alpha_packet: Dict, output_dir: str = "alpha_packets") -> str:
+    def save_alpha_packet(self, alpha_packet: Dict, output_dir: Optional[str] = None) -> str:
+        output_dir = output_dir or os.getenv("KAI_PACKET_DIR") or "alpha_packets"
         """
         Save Alpha Packet to file.
         
@@ -380,7 +384,7 @@ if __name__ == "__main__":
         },
         "metadata": {
             "rounds_evaluated": 3,
-            "agents_evaluated": ["charlie", "delta", "gamma"]
+            "agents_evaluated": ["charlie", "delta", "gamma", "vega"]
         }
     }
     

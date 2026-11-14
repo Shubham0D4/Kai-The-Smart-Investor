@@ -16,7 +16,7 @@ class DebateLogger:
     Structured logger for agent debates with grounding source tracking.
     """
     
-    def __init__(self, ticker: str, persona: str, log_dir: str = "debate_logs"):
+    def __init__(self, ticker: str, persona: str, log_dir: Optional[str] = None):
         """
         Initialize debate logger.
         
@@ -27,6 +27,7 @@ class DebateLogger:
         """
         self.ticker = ticker.upper()
         self.persona = persona
+        log_dir = log_dir or os.getenv("KAI_DEBATE_LOG_DIR") or "debate_logs"
         self.log_dir = log_dir
         # The short random suffix keeps concurrent debates for the same ticker in separate files.
         self.debate_id = (f"{self.ticker}_{self.persona}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"

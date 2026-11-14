@@ -33,7 +33,7 @@ from sqlalchemy.orm import sessionmaker
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from coordinator.llm_client import DEFAULT_GROQ_MODEL
+from coordinator.llm_config import load_llm_config
 from coordinator.personas import RiskPersona
 from coordinator.server import DebateCoordinator
 from gateway import models
@@ -56,7 +56,8 @@ logger = logging.getLogger(__name__)
 INDICES = {"S&P 500": "^GSPC", "NASDAQ": "^IXIC", "DOW": "^DJI", "VIX": "^VIX"}
 HISTORY_PERIODS = {"1d": "1m", "5d": "15m", "1mo": "60m", "ytd": "1d", "1y": "1d"}
 MARKET_NEWS_SYMBOL = "SPY"      # broad-market news: coverage of the S&P 500 ETF
-CHAT_MODEL = os.getenv("KAI_GROQ_MODEL") or DEFAULT_GROQ_MODEL
+# Chat uses the first Groq model of the "chat" role in config/llm.yaml
+CHAT_MODEL = next(m.model for m in load_llm_config().chain("chat") if m.provider == "groq")
 CHAT_SYSTEM_PROMPT = ("You are Kai, an advanced AI investment assistant. Be concise, professional, and "
                       "data-driven. You have no access to live data in this chat; say so if asked for prices.")
 

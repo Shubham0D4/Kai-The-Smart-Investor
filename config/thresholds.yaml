@@ -20,7 +20,14 @@ verification:
 circuit_breaker:
   min_agent_faithfulness: 0.60 # agents below this after round 1 are dropped
   min_valid_agents: 2          # fewer valid agents -> NO_VERDICT
-  token_limit: 50000           # all LLM calls in all rounds
+  token_limit: 80000           # all LLM calls in all rounds (four agents x three rounds; measured
+                               # 61-62k in live runs where one agent's round 3 was skipped for budget)
+
+# The judge weighs the domains (agents stay in their own lane and never weigh each other).
+# Debate score S = weighted mean of the valid agents' scores; weights are renormalised over the
+# agents that count. Coverage in confidence = weight of counted agents / total weight.
+judge:
+  weights: {charlie: 0.30, gamma: 0.30, delta: 0.20, vega: 0.20}
 
 integrity:
   unexplained_stance_penalty: 0.25

@@ -1,0 +1,19 @@
+{
+    "name": "Vega",
+    "version": "1.0.0",
+    "role": "Catalyst & Options Specialist",
+    "description": "Forward-looking view: the next earnings report and its consensus estimates, analyst price targets, rating and estimate revisions, and what the options market implies (implied volatility and implied move). Does not judge past fundamentals or news coverage; those belong to Charlie and Delta.",
+    "capabilities": [
+        "Upcoming earnings date and consensus estimates",
+        "Analyst price targets and the upside to the mean target",
+        "Rating mix and its change over three months",
+        "Upgrades, downgrades and target changes in the last 30 days",
+        "EPS estimate revisions in the last 30 days",
+        "At-the-money implied volatility and options-implied move"
+    ],
+    "mcp_tools_required": ["fetch_catalysts"],
+    "output_schema": "agents/schema.py AgentOutput (agent = vega)",
+    "model": "see config/llm.yaml roles.vega",
+    "author": "Kai - Economist Team",
+    "tags": ["catalysts", "earnings", "analyst-revisions", "options", "implied-volatility"]
+}

@@ -8,7 +8,7 @@ Rule (thresholds in config/thresholds.yaml, `hitl`):
         low_confidence_action "warn"    -> PASSIVE, explicit low-confidence WARNING notification
         low_confidence_action "approve" -> ACTIVE: approval required
   Buy/Sell with no confidence                  -> ACTIVE (fail closed)
-  Hold                                         -> PASSIVE info notification (no confidence)
+  Hold                                         -> PASSIVE info notification, with its confidence
   No Verdict                                   -> PASSIVE warning notification with the reason
 
 The manager keeps no state. A step-up challenge is a plain dict stored in the session row
@@ -77,7 +77,8 @@ class HITLManager:
             message = f"No verdict for {ticker}: {reason or 'the debate did not reach a decision'}"
         elif recommendation == "Hold":
             notif_type = "info"
-            message = f"Analysis complete for {ticker}. Recommendation: Hold"
+            message = (f"Analysis complete for {ticker}. Recommendation: Hold"
+                       + (f" ({_fmt_conf(confidence)} confidence in Hold)" if confidence is not None else ""))
         else:
             notif_type = "warning"
             message = (f"Low-confidence {recommendation} for {ticker} ({_fmt_conf(confidence)}). "

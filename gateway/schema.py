@@ -110,11 +110,11 @@ class AlphaPacket(BaseModel):
     ticker: str
     persona: str
     recommendation: RecommendationType
-    confidence: Optional[float] = Field(None, description="Only Buy and Sell carry a confidence")
+    confidence: Optional[float] = Field(None, description="Confidence in the verdict (Buy, Sell or Hold); none for No Verdict")
     quality_scores: QualityScores
     debate_summary: DebateSummary
     key_risks: List[str]
-    verdict_detail: Optional[Dict[str, Any]] = Field(None, description="Score, gates, supporting points, warnings")
+    verdict_detail: Optional[Dict[str, Any]] = Field(None, description="Score, gates, supporting points, warnings, suggestions")
     quant_report: Optional[Dict[str, Any]] = Field(None, description="Deterministic quant layer report (signed)")
     debate_log: str
     timestamp: str
@@ -195,10 +195,30 @@ class DebateOutcome(BaseModel):
 
 
 class LlmCall(BaseModel):
+    """One agent step (all attempts of it). Logs written before phase 6 only have total_tokens."""
     agent: str
     round: int
     ok: bool
     total_tokens: int
+    prompt_tokens: int = 0
+    candidates_tokens: int = Field(0, description="visible output tokens")
+    reasoning_tokens: int = Field(0, description="hidden reasoning tokens, billed as output")
+    cached_tokens: int = Field(0, description="prompt tokens served from the provider's cache")
+    models: List[str] = Field(default_factory=list, description="provider:model per attempt")
+    error_type: Optional[str] = None
+    repaired_from: Optional[str] = Field(None, description="why the first reply was rejected, if a repair succeeded")
+
+
+class AgentBudget(BaseModel):
+    share: int
+    used: int
+
+
+class TokenBudgetView(BaseModel):
+    total: int
+    reserve: int
+    reserve_left: int
+    agents: Dict[str, AgentBudget]
 
 
 class DebateView(BaseModel):
@@ -214,6 +234,9 @@ class DebateView(BaseModel):
     token_limit: Optional[int] = None
     agents: Dict[str, AgentView]
     llm_calls: List[LlmCall] = Field(default_factory=list)
+    token_budget: Optional[TokenBudgetView] = None
+    market_snapshot: Optional[Dict[str, Any]] = Field(
+        None, description="The one snapshot every agent worked from: fetch time, last close date, price, TTM EPS")
     events: List[LogEvent] = Field(default_factory=list)
     quant_report: Optional[QuantReport] = None
 

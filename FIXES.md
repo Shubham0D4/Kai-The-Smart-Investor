@@ -219,3 +219,89 @@ Still open / found:
 - Screenshots were deliberately NOT added to the repo: the fixtures use a fake LLM, so their
   agent text ("canned risk", "Value of sec:revenue:FY2022") would misrepresent the product in a
   pitch. Take them from a real run.
+
+## Phase 6: token economy (branch phase-6-tokens)
+Problem: a live TSLA debate stopped at 77,770 tokens (limit 50,000) with NO_VERDICT. Measured cause,
+largest first: (1) hidden reasoning of gpt-oss-120b billed as output (round 2: ~5k output tokens for
+a ~400-token JSON reply); (2) rejected replies resent with the full prompt (Charlie's round 3: 37,386
+tokens over 2 attempts, still failed); (3) prompt size (Charlie's evidence block: 3,956 tokens).
+The wording of claims and arguments was only ~300 tokens per debate, so "caveman" text would not help.
+
+- [x] Model routing per agent (config/llm.yaml): each agent starts on a different model with a
+      fallback chain; a failing or overloaded model (seen live: Gemini 503) falls through to the next.
+- [x] Reasoning control: Groq reasoning_effort=low, Gemini thinking budget/level; output cap per call.
+      Same round-2 prompt: 11,480 -> 7,533 tokens.
+- [x] Strict JSON schemas with enums of allowed evidence ids, claim ids (C1..C15) and claim refs.
+      Verified live on gpt-oss-120b, gemini-2.5-flash, gemini-3.5-flash-lite. gpt-oss-20b only
+      checks after generating (Groq returns 400), so it is used as a fallback and for prose.
+- [x] Wire protocol: compact evidence lines with exact values (3,956 -> ~770 tokens for Charlie),
+      compact JSON, prompts start with the same evidence block every round (prefix caching),
+      pilot-style comms protocol in the system instructions. Text shown to users stays plain English.
+- [x] Short repair for rule-breaking JSON instead of resending the prompt; round-2 critiques citing
+      evidence that is not the critic's own are dropped (with a warning) when the rest still covers
+      every agent; both errors reported when a repair fails.
+- [x] Per-agent token budget: shares of the limit plus a reserve; the output cap shrinks to what the
+      agent has left; an agent that cannot afford a useful reply is left out with a warning, so the
+      total is never exceeded. Too few agents for round 1 -> NO_VERDICT / TOKEN_LIMIT.
+- [x] Trace: prompt / output / reasoning / cached tokens and the model per step, repair reasons,
+      budget shares (API llm_calls + token_budget, UI trace panel).
+- [x] Bug found live: agents named their own claims "delta.C1" (refs became "delta.delta.C1"); claim
+      ids are now constrained to C1..C15 in the schema and the model.
+- [x] Sigma's prompt states each gate as PASSED/FAILED (the small model had described a failed
+      margin-of-safety gate as satisfied).
+- [x] google-genai replaces google-generativeai for agent calls. Pins checked against a clean
+      resolve of requirements.txt: google-genai 1.60.0 (3.x needs pydantic >= 2.12), httpx 0.28.1,
+      groq 1.7.0. A missing provider SDK now skips that model instead of failing the agent.
+
+Result, same ticker (TSLA, live, 3 rounds): COMPLETED, all 9 agent steps accepted on the first
+attempt, 41,751 tokens (Charlie 13,847 / Delta 11,443 / Gamma 16,461). Earlier runs on the way:
+30,110 (two steps failed: the claim-id bug) and 40,856 (Gamma skipped round 3: budget check too
+pessimistic, fixed by shrinking the output cap instead of reserving the full cap).
+
+Open:
+- [ ] Prompt tokens are now ~80% of the cost; round 3 resends the others' claims and critiques.
+      A further cut would send only the critiques that target the agent plus the claims they cite.
+- [ ] Groq bills a 400 "Generated JSON does not match" reply without returning usage, so those
+      tokens are not counted by Kai.
+- [ ] Sigma's explanation is unverified text; it can still misstate units or add detail. Options:
+      a stronger model for Sigma (one call, ~1.5k tokens), or checking its numbers like claims.
+- [ ] Measured on one ticker (TSLA, three live runs). Run more tickers before quoting averages.
+
+## Phase 7: verdict quality, fourth agent, live testing (branch phase-6-tokens, uncommitted)
+From a review of live output (NVDA) and the user's requests. Results: TESTRESULTS.md.
+
+- [x] Hold carries a confidence: 100 x hold conviction x integrity x coverage (distance to the
+      nearer Buy/Sell trigger, or how far a blocking gate missed). Only No Verdict has none.
+- [x] Suggestions ("What to watch", judge/playbook.py), computed from the evidence: what turns the
+      verdict into Buy/Sell (score, entry price), fair-value range, analyst target, next earnings
+      and options-implied move, past swings, persona disagreement. Sigma explains them; it cannot
+      change them. In the signed packet.
+- [x] One market snapshot: market data first (fetch time recorded), SEC per-share values
+      split-adjusted (NVDA's pre-2024-split EPS made a 4-year EPS CAGR read 6%; it is ~89%),
+      P/E on trailing-twelve-month EPS built from 10-Q data (it used a fiscal year ending 10
+      months earlier), catalysts priced off the same price.
+- [x] Return windows: mkt:return_5d/1m/3m/6m/ytd/1y and drawdown from the 52-week high, each with
+      its exact date range shown to agents; a round-2 dispute comparing different windows is
+      rejected in code. Verifier no longer reads "1m"/"3m" in claim text as millions.
+- [x] Strict lanes: each agent's prompt names its domain; a round-3 stance change must cite a
+      dispute of the agent's own claims (or its own failed claims). The judge weighs the domains
+      (judge.weights: fundamentals 0.30, valuation 0.30, news 0.20, catalysts 0.20).
+- [x] Vega, catalysts & options agent (earnings date and estimates, analyst targets, rating and
+      revision changes, ATM implied volatility, implied move), on its own model.
+- [x] prompts/: one editable system-prompt file per agent plus shared rule files (include syntax).
+- [x] Tests are live only: the fake LLM, recorded fixtures and the 266 offline tests were removed.
+      53 live backend tests (three real debates through the API, data, models, gateway) and 65
+      dashboard tests rendered with real captured sessions. Outputs isolated in tests/artifacts/.
+- [x] From the live run: request timeouts (a Gemini call hung the run), daily-quota errors no
+      longer retried, a third high-quota model in every chain (gemini-2.5-flash and
+      gemini-3.5-flash allow 20 free requests a day), schemas require at least one evidence id
+      (most repairs were empty evidence lists), token limit 70k -> 80k with shares rebalanced
+      (Gamma skipped round 3 for budget in 3 of 4 four-agent debates).
+
+Open:
+- [ ] Confirm the post-run fixes with a full re-run (TESTRESULTS.md section 5 lists them).
+- [ ] Sigma's explanation used numbers not in the material in 2 of 3 runs ("33 percent").
+- [ ] Delta needs a repair in round 3 in every run (unanswered critiques), about 4k tokens.
+- [ ] NVDA's Monte Carlo DCF was unavailable in the live run; AMD's DCF ($56 vs $534) suggests
+      the 5-year FCF-growth clamp undervalues fast growers. Review the DCF inputs.
+- [ ] Non-US tickers (e.g. ADANIENT) end as No Verdict: no SEC filings, and yfinance needs `.NS`.

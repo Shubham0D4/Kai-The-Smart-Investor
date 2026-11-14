@@ -4,17 +4,13 @@ import { vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { CommitteeContext } from '../context/committee';
 
-import holdCompleted from './fixtures/hold_completed.json';
-import waitingApproval from './fixtures/waiting_approval.json';
-import circuitBreaker from './fixtures/circuit_breaker.json';
-import buyContradiction from './fixtures/buy_contradiction.json';
-import failed from './fixtures/failed.json';
-import running from './fixtures/running.json';
+import nvdaBalanced from './fixtures/nvda_balanced.json';
+import aaplZen from './fixtures/aapl_zen.json';
+import tslaAlpha from './fixtures/tsla_alpha.json';
 
-// Real /status bodies captured from the backend (tests/integration/test_ui_fixtures.py).
-export const fixtures = {
-    holdCompleted, waitingApproval, circuitBreaker, buyContradiction, failed, running,
-};
+// Real /status bodies captured from live debates (real models, real data) by the backend's live
+// test suite (tests/conftest.py, tests/artifacts/runs/). Nothing here is invented.
+export const fixtures = { nvdaBalanced, aaplZen, tslaAlpha };
 
 /** A committee context value for a given /status body, with every action a spy. */
 export const committeeValue = (session, overrides = {}) => ({

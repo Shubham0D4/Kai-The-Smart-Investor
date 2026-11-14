@@ -4,11 +4,15 @@ Debate integrity (FIXES.md C5) and the computed verdict (C6). PHASE4_PLAN.md §5
 Everything here is deterministic. Persona enters only as a row of thresholds (C7).
 
   agent score  s_a = sign(stance) x confidence/100 x faithfulness_a
-  debate score S   = mean(s_a) over valid agents
+  debate score S   = weighted mean of s_a over valid agents (judge.weights in thresholds.yaml:
+                     the judge, not the agents, weighs fundamentals vs news vs valuation vs catalysts)
+  coverage         = weight of the valid agents / total weight
   Buy   if S >= buy_score and every Buy gate passes (margin of safety, volatility)
   Sell  if S <= sell_score
   Hold  otherwise
-  confidence (Buy/Sell only) = 100 x |S| x integrity x (valid agents / 3) x Q x C
+  confidence, Buy/Sell = 100 x |S| x integrity x coverage x Q x C
+  confidence, Hold     = 100 x hold_conviction x integrity x coverage, where hold_conviction is
+                         how firmly the debate sits inside the Hold zone (see hold_conviction)
 
 Q and C come from the quant report (DESIGN.md §10.4) and can only lower confidence:
   Q = 1 - w x mean(max(-a_i, 0)),  a_i = d x 2 x (p_i - 0.5), d = +1 Buy / -1 Sell
@@ -28,7 +32,7 @@ if TYPE_CHECKING:
     from coordinator.transcript import Transcript
     from quant.models import QuantReport
 
-ALL_AGENTS = ["charlie", "delta", "gamma"]
+ALL_AGENTS = ["charlie", "delta", "gamma", "vega"]
 STANCE_SIGN = {"bullish": 1, "neutral": 0, "bearish": -1}
 DIRECTION = {"Buy": "bullish", "Sell": "bearish", "Hold": "neutral"}
 
@@ -113,7 +117,9 @@ class Contradiction(BaseModel):
 
 class Verdict(BaseModel):
     recommendation: Literal["Buy", "Hold", "Sell", "No Verdict"]
-    confidence: Optional[float]      # None for Hold and No Verdict
+    confidence: Optional[float]      # None only for No Verdict
+    hold_conviction: Optional[float] = None   # Hold only: 0 = on the edge of Buy/Sell, 1 = firmly Hold
+    coverage: Optional[float] = None          # weight of the counted agents / total weight
     score: float                     # S
     agent_scores: Dict[str, float]
     gates: List[Gate]
@@ -142,9 +148,32 @@ def no_verdict(reason: str, agents_valid: List[str] = (), warnings: List[str] = 
                    warnings=list(warnings), reason=reason)
 
 
+def hold_conviction(S: float, gates: List[Gate], persona: PersonaThresholds) -> float:
+    """How firmly a Hold is a Hold, 0..1.
+    - Buy blocked by a gate (S already clears the buy threshold): the worst gate shortfall,
+      relative to its threshold (a margin of safety of 0.10 against 0.15 is a weak Hold; -22
+      against 0.15 is a firm one). No DCF at all counts as 0.5: the Buy could not be checked.
+    - Otherwise: the distance from S to the nearer of the buy / sell thresholds, relative to that
+      threshold (S = 0 is fully Hold; S just under the buy threshold is barely Hold)."""
+    if S >= persona.buy_score:
+        shortfalls = []
+        for g in gates:
+            if g.name not in ("margin_of_safety", "volatility") or g.passed:
+                continue
+            if g.value is None or g.threshold is None:
+                shortfalls.append(0.5)
+            elif g.name == "margin_of_safety":
+                shortfalls.append((g.threshold - g.value) / max(abs(g.threshold), 0.25))
+            else:
+                shortfalls.append((g.value - g.threshold) / g.threshold)
+        return round(min(max(max(shortfalls, default=0.0), 0.0), 1.0), 6)
+    d = (persona.buy_score - S) / persona.buy_score if S >= 0 else (S - persona.sell_score) / abs(persona.sell_score)
+    return round(min(max(d, 0.0), 1.0), 6)
+
+
 def decide_verdict(outputs: Dict[str, AgentOutput], faithfulness: Dict[str, float], integrity: float,
                    margin_of_safety: Optional[float], volatility: Optional[float],
-                   persona: PersonaThresholds, cfg: Thresholds, total_agents: int = 3,
+                   persona: PersonaThresholds, cfg: Thresholds,
                    warnings: Optional[List[str]] = None) -> Verdict:
     warnings = list(warnings or [])
     min_f = cfg.circuit_breaker.min_agent_faithfulness
@@ -162,7 +191,10 @@ def decide_verdict(outputs: Dict[str, AgentOutput], faithfulness: Dict[str, floa
         return no_verdict(f"only {len(valid)} valid agent(s); at least "
                           f"{cfg.circuit_breaker.min_valid_agents} needed", valid, warnings, scores)
 
-    S = round(sum(scores[a] for a in valid) / len(valid), 6)
+    weights = cfg.judge.weights
+    counted = sum(weights[a] for a in valid)
+    S = round(sum(weights[a] * scores[a] for a in valid) / counted, 6)
+    coverage = round(counted / sum(weights[a] for a in ALL_AGENTS), 6)
 
     gates = [Gate(name="buy_score", value=S, threshold=persona.buy_score, passed=S >= persona.buy_score,
                   note=f"S {S:+.2f} {'>=' if S >= persona.buy_score else '<'} buy threshold {persona.buy_score:+.2f}")]
@@ -204,13 +236,16 @@ def decide_verdict(outputs: Dict[str, AgentOutput], faithfulness: Dict[str, floa
             blocked = "; ".join(g.note for g in buy_gates if not g.passed)
             warnings.append(f"Buy blocked: {blocked}")
 
-    confidence = None
+    conviction = None
     if rec in ("Buy", "Sell"):
-        confidence = round(100 * abs(S) * integrity * (len(valid) / total_agents), 2)
+        confidence = round(100 * abs(S) * integrity * coverage, 2)
+    else:
+        conviction = hold_conviction(S, gates, persona)
+        confidence = round(100 * conviction * integrity * coverage, 2)
 
     return Verdict(recommendation=rec, confidence=confidence, score=S, agent_scores=scores, gates=gates,
                    agents_valid=valid, agents_missing=[a for a in ALL_AGENTS if a not in valid],
-                   warnings=warnings)
+                   warnings=warnings, hold_conviction=conviction, coverage=coverage)
 
 
 # --------------------------------------------------------------------------- explanation material

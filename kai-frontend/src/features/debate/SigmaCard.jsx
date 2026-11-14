@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Circle, MinusCircle, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
+import { AlertTriangle, CalendarClock, CheckCircle2, Circle, Compass, Info, MinusCircle, Ruler, ShieldAlert, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
 import { useCommittee } from '../../context/committee';
 import Chip from '../../components/Chip';
 import { getQuote } from '../../services/api';
@@ -46,9 +46,45 @@ const Meter = ({ label, value }) => (
     </div>
 );
 
+// How each kind of suggestion is shown (judge/playbook.py Suggestion.kind)
+const KIND = {
+    action: { icon: Compass, tone: 'accent', label: 'Signal' },
+    trigger: { icon: Info, tone: 'info', label: 'Trigger' },
+    level: { icon: Ruler, tone: 'plain', label: 'Level' },
+    event: { icon: CalendarClock, tone: 'warn', label: 'Event' },
+    risk: { icon: ShieldAlert, tone: 'neg', label: 'Risk' },
+    context: { icon: Info, tone: 'neutral', label: 'Context' },
+};
+
+/** The computed playbook: what the verdict means, what would change it, levels, events, risk. */
+const Playbook = ({ items }) => (
+    <div data-testid="playbook">
+        <div className="kai-label">What to watch <span className="text-lowercase fw-normal" style={{ letterSpacing: 0 }}>(computed from the evidence; research, not advice)</span></div>
+        <div className="row g-3">
+            {items.map((s, i) => {
+                const k = KIND[s.kind] || KIND.context;
+                const Icon = k.icon;
+                return (
+                    <div key={`${s.kind}-${i}`} className={s.kind === 'action' ? 'col-12' : 'col-md-6'}>
+                        <div className="kai-tile h-100" title={s.sources?.length ? `From: ${s.sources.join(', ')}` : undefined}>
+                            <div className="d-flex align-items-center gap-2 mb-1">
+                                <Icon size={16} style={{ color: 'var(--text-2)' }} />
+                                <span className="fw-semibold">{s.title}</span>
+                                <Chip tone={k.tone} className="ms-auto">{k.label}</Chip>
+                            </div>
+                            <div className="small" style={{ color: 'var(--text-2)' }}>{s.detail}</div>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    </div>
+);
+
 /** Sigma's verdict. Every number here was computed in code; the LLM only wrote the narrative. */
 const SigmaCard = () => {
     const { session, sigma, debate } = useCommittee();
+    const snapshot = debate?.market_snapshot;
     if (!sigma) return null;
 
     const rec = sigma.final_recommendation;
@@ -65,6 +101,11 @@ const SigmaCard = () => {
                 <div>
                     <div className="kai-label mb-1">Final verdict · {sigma.persona} thresholds</div>
                     <h2 className="mb-0" style={{ fontSize: '1.5rem' }}>{sigma.ticker}</h2>
+                    {snapshot?.fetched_at && (
+                        <div className="small text-muted" data-testid="snapshot">
+                            Market snapshot {snapshot.fetched_at.replace('T', ' ').replace('Z', ' UTC')} · last close {snapshot.market_date}
+                        </div>
+                    )}
                 </div>
                 {session?.alpha_packet && (
                     <Chip tone="plain" title="Ed25519-signed record of this verdict, its inputs and the quant report">
@@ -80,13 +121,20 @@ const SigmaCard = () => {
                         <div className={`kai-verdict-pill ${sig.tone}`} data-testid="verdict"><Icon size={30} /> {rec.recommendation}</div>
                         <div className="mt-3 d-flex align-items-baseline gap-2 flex-wrap" data-testid="confidence">
                             {hasConfidence
-                                ? <><span style={{ fontSize: '1.5rem', fontWeight: 700 }}>{conf(rec.confidence)}</span>{' '}<span className="text-muted">confidence</span></>
-                                : <span className="text-muted">No confidence (only Buy and Sell carry one)</span>}
+                                ? <><span style={{ fontSize: '1.5rem', fontWeight: 700 }}>{conf(rec.confidence)}</span>{' '}
+                                    <span className="text-muted">{rec.recommendation === 'Hold' ? 'confidence in Hold' : 'confidence'}</span></>
+                                : <span className="text-muted">No confidence: no verdict was reached</span>}
                         </div>
                         {adjusted && (
                             <div className="small text-muted mt-1">
                                 {conf(rec.confidence_before_quant)} before the quant report × agreement {rec.quant_agreement?.toFixed(2)}
                                 {' '}× contradictions {rec.contradiction_factor?.toFixed(2)}
+                            </div>
+                        )}
+                        {rec.recommendation === 'Hold' && rec.hold_conviction != null && (
+                            <div className="small text-muted mt-1">
+                                {rec.hold_conviction >= 0.5 ? 'Firmly inside the Hold zone' : 'Close to a Buy or Sell trigger'}
+                                {' '}(conviction {rec.hold_conviction.toFixed(2)}{rec.coverage != null ? `, domains counted ${Math.round(rec.coverage * 100)}%` : ''})
                             </div>
                         )}
                         <div className="small text-muted mt-1">Debate score {rec.score >= 0 ? '+' : ''}{rec.score.toFixed(2)} on a scale of −1 (bearish) to +1 (bullish)</div>
@@ -175,6 +223,13 @@ const SigmaCard = () => {
                         {rec.warnings.length > 0 && <ul className="mb-0 mt-1 ps-3">{rec.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
                     </div>
                 </div>
+            )}
+
+            {rec.suggestions?.length > 0 && (
+                <>
+                    <hr className="kai-divider" />
+                    <div className="kai-card-body"><Playbook items={rec.suggestions} /></div>
+                </>
             )}
 
             <hr className="kai-divider" />

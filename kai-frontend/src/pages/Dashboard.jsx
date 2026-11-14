@@ -8,8 +8,8 @@ import { getMarketNews } from '../services/api';
 
 const STEPS = [
     { icon: FileSearch, title: '1 · Evidence is fetched', text: 'SEC financial statements, news from several feeds, prices and market history are fetched once, in code, before any model runs.' },
-    { icon: Users, title: '2 · Agents debate, then are fact-checked', text: 'Charlie (fundamentals), Delta (sentiment) and Gamma (valuation) state claims with evidence. Every number is re-checked against the data; agents that fail are dropped.' },
-    { icon: Gavel, title: '3 · The verdict is computed', text: 'The judge scores the debate and applies fixed Buy/Sell rules plus a quantitative report. The language model only explains the result; it cannot change it.' },
+    { icon: Users, title: '2 · Agents debate, then are fact-checked', text: 'Charlie (fundamentals), Delta (news), Gamma (valuation) and Vega (catalysts & options) each argue only their own domain, from one market snapshot. Every number is re-checked against the data; agents that fail are dropped.' },
+    { icon: Gavel, title: '3 · The verdict is computed', text: 'The judge weighs the four domains, applies fixed Buy/Sell rules and a quantitative report, and lists what would change the verdict. The language model only explains the result; it cannot change it.' },
 ];
 
 const HowItWorks = () => (

@@ -1,0 +1,4569 @@
+{
+ "session_id": "sess_1175377a70284e18",
+ "status": "completed",
+ "ticker": "NVDA",
+ "persona": "balanced",
+ "created_at": "2026-11-14T10:33:14.714274",
+ "updated_at": "2026-11-14T10:37:23.286047",
+ "progress": null,
+ "error": null,
+ "hitl_mode": "passive",
+ "hitl_reason": "Hold recommendation - notification only",
+ "approval_status": null,
+ "debate": {
+  "debate_id": "NVDA_balanced_20261114_103314_8d244e",
+  "ticker": "NVDA",
+  "persona": "balanced",
+  "rounds_started": 3,
+  "finished": true,
+  "outcome": {
+   "status": "COMPLETED",
+   "reason": null,
+   "detail": null,
+   "warnings": [
+    "quant field unavailable - quant:mc_dcf.fair_value_p10: only 0 year(s) of free cash flow; at least 2 needed",
+    "quant field unavailable - quant:mc_dcf.fair_value_p50: only 0 year(s) of free cash flow; at least 2 needed",
+    "quant field unavailable - quant:mc_dcf.fair_value_p90: only 0 year(s) of free cash flow; at least 2 needed",
+    "quant field unavailable - quant:mc_dcf.prob_fair_above_price: only 0 year(s) of free cash flow; at least 2 needed",
+    "quant field unavailable - quant:base_rate.share_up: insufficient data: 1 similar cases out of 37; at least 30 needed",
+    "quant field unavailable - quant:calibration.brier: only 0 recorded forecast/outcome pairs; at least 20 needed",
+    "delta: news provider yfinance failed: *** YAHOO! FINANCE IS CURRENTLY DOWN! ***",
+    "delta: 1 of 15 articles have no summary (headline only)",
+    "gamma: DCF not computed: fewer than 2 years of FCF",
+    "gamma failed in round 3: token budget: this agent's token share is used up (~0 tokens of room, 1166 needed)"
+   ]
+  },
+  "total_tokens": 62292,
+  "token_limit": 70000,
+  "agents": {
+   "charlie": {
+    "agent": "charlie",
+    "state": "done",
+    "error": null,
+    "dropped_reason": null,
+    "round1": {
+     "agent": "charlie",
+     "round": 1,
+     "stance": "bullish",
+     "confidence": 85.0,
+     "claims": [
+      {
+       "id": "C1",
+       "kind": "numeric",
+       "text": "Revenue grew 125.8% YoY FY2024 vs FY2023",
+       "value": 1.258,
+       "unit": "ratio",
+       "op": "growth",
+       "evidence": [
+        "sec:revenue:FY2024",
+        "sec:revenue:FY2023"
+       ]
+      },
+      {
+       "id": "C2",
+       "kind": "numeric",
+       "text": "Operating margin was 54.1% in FY2024",
+       "value": 0.541,
+       "unit": "ratio",
+       "op": "ratio",
+       "evidence": [
+        "sec:operating_income:FY2024",
+        "sec:revenue:FY2024"
+       ]
+      },
+      {
+       "id": "C3",
+       "kind": "numeric",
+       "text": "Debt-to-equity ratio was 0.23 in FY2024",
+       "value": 0.226,
+       "unit": "ratio",
+       "op": "ratio",
+       "evidence": [
+        "sec:long_term_debt:FY2024",
+        "sec:equity:FY2024"
+       ]
+      },
+      {
+       "id": "C4",
+       "kind": "inference",
+       "text": "Strong revenue growth, high operating margin and low leverage support a bullish fundamental outlook",
+       "based_on": [
+        "C1",
+        "C2",
+        "C3"
+       ]
+      }
+     ],
+     "risks": [
+      "Potential slowdown in AI demand could curb revenue growth",
+      "Higher R&D spending may pressure cash flow",
+      "Macroeconomic tightening could increase financing costs"
+     ]
+    },
+    "evidence": [
+     {
+      "id": "sec:revenue:FY2022",
+      "label": "Revenue FY2022 (split-adjusted, x10)",
+      "value": 269140000000.0,
+      "unit": "USD",
+      "period": "2021-02-01..2022-01-30",
+      "text": null,
+      "source": "SEC XBRL RevenueFromContractWithCustomerExcludingAssessedTax, 10-K filed 2022-03-18 (accn 0001045810-22-000036); adjusted for stock splits after 2022-03-18 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581022000036/"
+     },
+     {
+      "id": "sec:revenue:FY2023",
+      "label": "Revenue FY2023",
+      "value": 26974000000.0,
+      "unit": "USD",
+      "period": "2022-01-31..2023-01-29",
+      "text": null,
+      "source": "SEC XBRL Revenues, 10-K filed 2025-02-26 (accn 0001045810-25-000023)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/"
+     },
+     {
+      "id": "sec:revenue:FY2024",
+      "label": "Revenue FY2024",
+      "value": 60922000000.0,
+      "unit": "USD",
+      "period": "2023-01-30..2024-01-28",
+      "text": null,
+      "source": "SEC XBRL Revenues, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:revenue:FY2025",
+      "label": "Revenue FY2025",
+      "value": 130497000000.0,
+      "unit": "USD",
+      "period": "2024-01-29..2025-01-26",
+      "text": null,
+      "source": "SEC XBRL Revenues, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:revenue:FY2026",
+      "label": "Revenue FY2026",
+      "value": 215938000000.0,
+      "unit": "USD",
+      "period": "2025-01-27..2026-01-25",
+      "text": null,
+      "source": "SEC XBRL Revenues, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:gross_profit:FY2022",
+      "label": "Gross profit FY2022 (split-adjusted, x10)",
+      "value": 174750000000.0,
+      "unit": "USD",
+      "period": "2021-02-01..2022-01-30",
+      "text": null,
+      "source": "SEC XBRL GrossProfit, 10-K filed 2024-02-21 (accn 0001045810-24-000029); adjusted for stock splits after 2024-02-21 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/"
+     },
+     {
+      "id": "sec:gross_profit:FY2023",
+      "label": "Gross profit FY2023",
+      "value": 15356000000.0,
+      "unit": "USD",
+      "period": "2022-01-31..2023-01-29",
+      "text": null,
+      "source": "SEC XBRL GrossProfit, 10-K filed 2025-02-26 (accn 0001045810-25-000023)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/"
+     },
+     {
+      "id": "sec:gross_profit:FY2024",
+      "label": "Gross profit FY2024",
+      "value": 44301000000.0,
+      "unit": "USD",
+      "period": "2023-01-30..2024-01-28",
+      "text": null,
+      "source": "SEC XBRL GrossProfit, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:gross_profit:FY2025",
+      "label": "Gross profit FY2025",
+      "value": 97858000000.0,
+      "unit": "USD",
+      "period": "2024-01-29..2025-01-26",
+      "text": null,
+      "source": "SEC XBRL GrossProfit, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:gross_profit:FY2026",
+      "label": "Gross profit FY2026",
+      "value": 153463000000.0,
+      "unit": "USD",
+      "period": "2025-01-27..2026-01-25",
+      "text": null,
+      "source": "SEC XBRL GrossProfit, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:operating_income:FY2022",
+      "label": "Operating income FY2022 (split-adjusted, x10)",
+      "value": 100410000000.0,
+      "unit": "USD",
+      "period": "2021-02-01..2022-01-30",
+      "text": null,
+      "source": "SEC XBRL OperatingIncomeLoss, 10-K filed 2024-02-21 (accn 0001045810-24-000029); adjusted for stock splits after 2024-02-21 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/"
+     },
+     {
+      "id": "sec:operating_income:FY2023",
+      "label": "Operating income FY2023",
+      "value": 4224000000.0,
+      "unit": "USD",
+      "period": "2022-01-31..2023-01-29",
+      "text": null,
+      "source": "SEC XBRL OperatingIncomeLoss, 10-K filed 2025-02-26 (accn 0001045810-25-000023)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/"
+     },
+     {
+      "id": "sec:operating_income:FY2024",
+      "label": "Operating income FY2024",
+      "value": 32972000000.0,
+      "unit": "USD",
+      "period": "2023-01-30..2024-01-28",
+      "text": null,
+      "source": "SEC XBRL OperatingIncomeLoss, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:operating_income:FY2025",
+      "label": "Operating income FY2025",
+      "value": 81453000000.0,
+      "unit": "USD",
+      "period": "2024-01-29..2025-01-26",
+      "text": null,
+      "source": "SEC XBRL OperatingIncomeLoss, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:operating_income:FY2026",
+      "label": "Operating income FY2026",
+      "value": 130387000000.0,
+      "unit": "USD",
+      "period": "2025-01-27..2026-01-25",
+      "text": null,
+      "source": "SEC XBRL OperatingIncomeLoss, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:net_income:FY2022",
+      "label": "Net income FY2022 (split-adjusted, x10)",
+      "value": 97520000000.0,
+      "unit": "USD",
+      "period": "2021-02-01..2022-01-30",
+      "text": null,
+      "source": "SEC XBRL NetIncomeLoss, 10-K filed 2024-02-21 (accn 0001045810-24-000029); adjusted for stock splits after 2024-02-21 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/"
+     },
+     {
+      "id": "sec:net_income:FY2023",
+      "label": "Net income FY2023",
+      "value": 4368000000.0,
+      "unit": "USD",
+      "period": "2022-01-31..2023-01-29",
+      "text": null,
+      "source": "SEC XBRL NetIncomeLoss, 10-K filed 2025-02-26 (accn 0001045810-25-000023)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/"
+     },
+     {
+      "id": "sec:net_income:FY2024",
+      "label": "Net income FY2024",
+      "value": 29760000000.0,
+      "unit": "USD",
+      "period": "2023-01-30..2024-01-28",
+      "text": null,
+      "source": "SEC XBRL NetIncomeLoss, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:net_income:FY2025",
+      "label": "Net income FY2025",
+      "value": 72880000000.0,
+      "unit": "USD",
+      "period": "2024-01-29..2025-01-26",
+      "text": null,
+      "source": "SEC XBRL NetIncomeLoss, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:net_income:FY2026",
+      "label": "Net income FY2026",
+      "value": 120067000000.0,
+      "unit": "USD",
+      "period": "2025-01-27..2026-01-25",
+      "text": null,
+      "source": "SEC XBRL NetIncomeLoss, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:eps_diluted:FY2022",
+      "label": "Diluted EPS FY2022 (split-adjusted, /10)",
+      "value": 0.385,
+      "unit": "USD/shares",
+      "period": "2021-02-01..2022-01-30",
+      "text": null,
+      "source": "SEC XBRL EarningsPerShareDiluted, 10-K filed 2024-02-21 (accn 0001045810-24-000029); adjusted for stock splits after 2024-02-21 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/"
+     },
+     {
+      "id": "sec:eps_diluted:FY2023",
+      "label": "Diluted EPS FY2023",
+      "value": 0.17,
+      "unit": "USD/shares",
+      "period": "2022-01-31..2023-01-29",
+      "text": null,
+      "source": "SEC XBRL EarningsPerShareDiluted, 10-K filed 2025-02-26 (accn 0001045810-25-000023)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/"
+     },
+     {
+      "id": "sec:eps_diluted:FY2024",
+      "label": "Diluted EPS FY2024",
+      "value": 1.19,
+      "unit": "USD/shares",
+      "period": "2023-01-30..2024-01-28",
+      "text": null,
+      "source": "SEC XBRL EarningsPerShareDiluted, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:eps_diluted:FY2025",
+      "label": "Diluted EPS FY2025",
+      "value": 2.94,
+      "unit": "USD/shares",
+      "period": "2024-01-29..2025-01-26",
+      "text": null,
+      "source": "SEC XBRL EarningsPerShareDiluted, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:eps_diluted:FY2026",
+      "label": "Diluted EPS FY2026",
+      "value": 4.9,
+      "unit": "USD/shares",
+      "period": "2025-01-27..2026-01-25",
+      "text": null,
+      "source": "SEC XBRL EarningsPerShareDiluted, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:operating_cash_flow:FY2022",
+      "label": "Operating cash flow FY2022 (split-adjusted, x10)",
+      "value": 91080000000.0,
+      "unit": "USD",
+      "period": "2021-02-01..2022-01-30",
+      "text": null,
+      "source": "SEC XBRL NetCashProvidedByUsedInOperatingActivities, 10-K filed 2024-02-21 (accn 0001045810-24-000029); adjusted for stock splits after 2024-02-21 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/"
+     },
+     {
+      "id": "sec:operating_cash_flow:FY2023",
+      "label": "Operating cash flow FY2023",
+      "value": 5641000000.0,
+      "unit": "USD",
+      "period": "2022-01-31..2023-01-29",
+      "text": null,
+      "source": "SEC XBRL NetCashProvidedByUsedInOperatingActivities, 10-K filed 2025-02-26 (accn 0001045810-25-000023)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/"
+     },
+     {
+      "id": "sec:operating_cash_flow:FY2024",
+      "label": "Operating cash flow FY2024",
+      "value": 28090000000.0,
+      "unit": "USD",
+      "period": "2023-01-30..2024-01-28",
+      "text": null,
+      "source": "SEC XBRL NetCashProvidedByUsedInOperatingActivities, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:operating_cash_flow:FY2025",
+      "label": "Operating cash flow FY2025",
+      "value": 64089000000.0,
+      "unit": "USD",
+      "period": "2024-01-29..2025-01-26",
+      "text": null,
+      "source": "SEC XBRL NetCashProvidedByUsedInOperatingActivities, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:operating_cash_flow:FY2026",
+      "label": "Operating cash flow FY2026",
+      "value": 102718000000.0,
+      "unit": "USD",
+      "period": "2025-01-27..2026-01-25",
+      "text": null,
+      "source": "SEC XBRL NetCashProvidedByUsedInOperatingActivities, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:cash:FY2022",
+      "label": "Cash and cash equivalents FY2022 (split-adjusted, x10)",
+      "value": 19900000000.0,
+      "unit": "USD",
+      "period": "2022-01-30",
+      "text": null,
+      "source": "SEC XBRL CashAndCashEquivalentsAtCarryingValue, 10-K filed 2023-02-24 (accn 0001045810-23-000017); adjusted for stock splits after 2023-02-24 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581023000017/"
+     },
+     {
+      "id": "sec:cash:FY2023",
+      "label": "Cash and cash equivalents FY2023 (split-adjusted, x10)",
+      "value": 33890000000.0,
+      "unit": "USD",
+      "period": "2023-01-29",
+      "text": null,
+      "source": "SEC XBRL CashAndCashEquivalentsAtCarryingValue, 10-K filed 2024-02-21 (accn 0001045810-24-000029); adjusted for stock splits after 2024-02-21 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/"
+     },
+     {
+      "id": "sec:cash:FY2024",
+      "label": "Cash and cash equivalents FY2024",
+      "value": 7280000000.0,
+      "unit": "USD",
+      "period": "2024-01-28",
+      "text": null,
+      "source": "SEC XBRL CashAndCashEquivalentsAtCarryingValue, 10-K filed 2025-02-26 (accn 0001045810-25-000023)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/"
+     },
+     {
+      "id": "sec:cash:FY2025",
+      "label": "Cash and cash equivalents FY2025",
+      "value": 8589000000.0,
+      "unit": "USD",
+      "period": "2025-01-26",
+      "text": null,
+      "source": "SEC XBRL CashAndCashEquivalentsAtCarryingValue, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:cash:FY2026",
+      "label": "Cash and cash equivalents FY2026",
+      "value": 10605000000.0,
+      "unit": "USD",
+      "period": "2026-01-25",
+      "text": null,
+      "source": "SEC XBRL CashAndCashEquivalentsAtCarryingValue, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:long_term_debt:FY2022",
+      "label": "Long-term debt (incl. current portion) FY2022 (split-adjusted, x10)",
+      "value": 109460000000.0,
+      "unit": "USD",
+      "period": "2022-01-30",
+      "text": null,
+      "source": "SEC XBRL LongTermDebt, 10-K filed 2023-02-24 (accn 0001045810-23-000017); adjusted for stock splits after 2023-02-24 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581023000017/"
+     },
+     {
+      "id": "sec:long_term_debt:FY2023",
+      "label": "Long-term debt (incl. current portion) FY2023 (split-adjusted, x10)",
+      "value": 109530000000.0,
+      "unit": "USD",
+      "period": "2023-01-29",
+      "text": null,
+      "source": "SEC XBRL LongTermDebt, 10-K filed 2024-02-21 (accn 0001045810-24-000029); adjusted for stock splits after 2024-02-21 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/"
+     },
+     {
+      "id": "sec:long_term_debt:FY2024",
+      "label": "Long-term debt (incl. current portion) FY2024",
+      "value": 9709000000.0,
+      "unit": "USD",
+      "period": "2024-01-28",
+      "text": null,
+      "source": "SEC XBRL LongTermDebt, 10-K filed 2025-02-26 (accn 0001045810-25-000023)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/"
+     },
+     {
+      "id": "sec:long_term_debt:FY2025",
+      "label": "Long-term debt (incl. current portion) FY2025",
+      "value": 8463000000.0,
+      "unit": "USD",
+      "period": "2025-01-26",
+      "text": null,
+      "source": "SEC XBRL LongTermDebt, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:long_term_debt:FY2026",
+      "label": "Long-term debt (incl. current portion) FY2026",
+      "value": 8468000000.0,
+      "unit": "USD",
+      "period": "2026-01-25",
+      "text": null,
+      "source": "SEC XBRL LongTermDebt, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:commercial_paper:FY2022",
+      "label": "Commercial paper FY2022 (split-adjusted, x10)",
+      "value": 0.0,
+      "unit": "USD",
+      "period": "2022-01-30",
+      "text": null,
+      "source": "SEC XBRL CommercialPaper, 10-K filed 2022-03-18 (accn 0001045810-22-000036); adjusted for stock splits after 2022-03-18 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581022000036/"
+     },
+     {
+      "id": "sec:commercial_paper:FY2023",
+      "label": "Commercial paper FY2023 (split-adjusted, x10)",
+      "value": 0.0,
+      "unit": "USD",
+      "period": "2023-01-29",
+      "text": null,
+      "source": "SEC XBRL CommercialPaper, 10-K filed 2023-02-24 (accn 0001045810-23-000017); adjusted for stock splits after 2023-02-24 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581023000017/"
+     },
+     {
+      "id": "sec:commercial_paper:FY2024",
+      "label": "Commercial paper FY2024 (split-adjusted, x10)",
+      "value": 0.0,
+      "unit": "USD",
+      "period": "2024-01-28",
+      "text": null,
+      "source": "SEC XBRL CommercialPaper, 10-K filed 2024-02-21 (accn 0001045810-24-000029); adjusted for stock splits after 2024-02-21 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/"
+     },
+     {
+      "id": "sec:commercial_paper:FY2025",
+      "label": "Commercial paper FY2025",
+      "value": 0.0,
+      "unit": "USD",
+      "period": "2025-01-26",
+      "text": null,
+      "source": "SEC XBRL CommercialPaper, 10-K filed 2025-02-26 (accn 0001045810-25-000023)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/"
+     },
+     {
+      "id": "sec:equity:FY2022",
+      "label": "Stockholders' equity FY2022",
+      "value": 26612000000.0,
+      "unit": "USD",
+      "period": "2022-01-30",
+      "text": null,
+      "source": "SEC XBRL StockholdersEquity, 10-K filed 2025-02-26 (accn 0001045810-25-000023)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/"
+     },
+     {
+      "id": "sec:equity:FY2023",
+      "label": "Stockholders' equity FY2023",
+      "value": 22101000000.0,
+      "unit": "USD",
+      "period": "2023-01-29",
+      "text": null,
+      "source": "SEC XBRL StockholdersEquity, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:equity:FY2024",
+      "label": "Stockholders' equity FY2024",
+      "value": 42978000000.0,
+      "unit": "USD",
+      "period": "2024-01-28",
+      "text": null,
+      "source": "SEC XBRL StockholdersEquity, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:equity:FY2025",
+      "label": "Stockholders' equity FY2025",
+      "value": 79327000000.0,
+      "unit": "USD",
+      "period": "2025-01-26",
+      "text": null,
+      "source": "SEC XBRL StockholdersEquity, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:equity:FY2026",
+      "label": "Stockholders' equity FY2026",
+      "value": 157293000000.0,
+      "unit": "USD",
+      "period": "2026-01-25",
+      "text": null,
+      "source": "SEC XBRL StockholdersEquity, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:revenue:TTM",
+      "label": "Revenue, trailing 12 months to 2022-01-30",
+      "value": 26914000000.0,
+      "unit": "USD",
+      "period": "2021-02-01..2022-01-30",
+      "text": null,
+      "source": "SEC XBRL RevenueFromContractWithCustomerExcludingAssessedTax: latest 10-K fiscal year",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581022000036/"
+     },
+     {
+      "id": "sec:net_income:TTM",
+      "label": "Net income, trailing 12 months to 2026-07-26",
+      "value": 192880000000.0,
+      "unit": "USD",
+      "period": "2025-07-26..2026-07-26",
+      "text": null,
+      "source": "SEC XBRL NetIncomeLoss: FY to 2026-01-25 + 6M to 2026-07-26 - 6M to 2025-07-27",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"
+     },
+     {
+      "id": "sec:eps_diluted:TTM",
+      "label": "Diluted EPS, trailing 12 months to 2026-07-26",
+      "value": 7.91,
+      "unit": "USD/shares",
+      "period": "2025-07-26..2026-07-26",
+      "text": null,
+      "source": "SEC XBRL EarningsPerShareDiluted: FY to 2026-01-25 + 6M to 2026-07-26 - 6M to 2025-07-27; split-adjusted",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"
+     },
+     {
+      "id": "sec:operating_cash_flow:TTM",
+      "label": "Operating cash flow, trailing 12 months to 2026-07-26",
+      "value": 134360000000.0,
+      "unit": "USD",
+      "period": "2025-07-26..2026-07-26",
+      "text": null,
+      "source": "SEC XBRL NetCashProvidedByUsedInOperatingActivities: FY to 2026-01-25 + 6M to 2026-07-26 - 6M to 2025-07-27",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"
+     },
+     {
+      "id": "sec:shares_outstanding:latest",
+      "label": "Common shares outstanding",
+      "value": 24100000000.0,
+      "unit": "shares",
+      "period": "2026-08-21",
+      "text": null,
+      "source": "SEC XBRL dei:EntityCommonStockSharesOutstanding, 10-Q filed 2026-08-26",
+      "url": null
+     }
+    ],
+    "verification": {
+     "agent": "charlie",
+     "round": 1,
+     "checks": [
+      {
+       "claim_id": "C1",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 1.2585452658115224,
+       "stated": 1.258,
+       "detail": null
+      },
+      {
+       "claim_id": "C2",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 0.5412166376678376,
+       "stated": 0.541,
+       "detail": null
+      },
+      {
+       "claim_id": "C3",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 0.22590627763041557,
+       "stated": 0.226,
+       "detail": null
+      },
+      {
+       "claim_id": "C4",
+       "kind": "inference",
+       "checkable": false,
+       "verified": true,
+       "reason": null,
+       "expected": null,
+       "stated": null,
+       "detail": null
+      }
+     ],
+     "checkable": 3,
+     "verified": 3,
+     "denominator": 3,
+     "faithfulness": 1.0
+    },
+    "final_verification": {
+     "agent": "charlie",
+     "round": 3,
+     "checks": [
+      {
+       "claim_id": "C1",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 1.2585452658115224,
+       "stated": 1.258,
+       "detail": null
+      },
+      {
+       "claim_id": "C2",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 0.5412166376678376,
+       "stated": 0.541,
+       "detail": null
+      },
+      {
+       "claim_id": "C3",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 0.22590627763041557,
+       "stated": 0.226,
+       "detail": null
+      },
+      {
+       "claim_id": "C4",
+       "kind": "inference",
+       "checkable": false,
+       "verified": true,
+       "reason": null,
+       "expected": null,
+       "stated": null,
+       "detail": null
+      }
+     ],
+     "checkable": 3,
+     "verified": 3,
+     "denominator": 3,
+     "faithfulness": 1.0
+    },
+    "round2": {
+     "agent": "charlie",
+     "round": 2,
+     "critiques": [
+      {
+       "id": "K1",
+       "target": "delta.C1",
+       "verdict": "qualify",
+       "argument": "No SEC filing evidence on CEO resignation; claim cannot be verified from provided data",
+       "evidence": [
+        "sec:revenue:FY2026"
+       ]
+      },
+      {
+       "id": "K2",
+       "target": "delta.C3",
+       "verdict": "qualify",
+       "argument": "Drawdown figure requires market price data not present in SEC evidence",
+       "evidence": [
+        "sec:operating_cash_flow:FY2026"
+       ]
+      },
+      {
+       "id": "K3",
+       "target": "gamma.C3",
+       "verdict": "support",
+       "argument": "Cash 10.605B minus long-term debt 8.468B yields net cash of ~2.14B, matching claim",
+       "evidence": [
+        "sec:cash:FY2026",
+        "sec:long_term_debt:FY2026"
+       ]
+      },
+      {
+       "id": "K4",
+       "target": "vega.C1",
+       "verdict": "qualify",
+       "argument": "Analyst target upside is not disclosed in SEC filings; cannot confirm",
+       "evidence": [
+        "sec:net_income:FY2026"
+       ]
+      }
+     ]
+    },
+    "round3": {
+     "agent": "charlie",
+     "round": 3,
+     "stance": "bullish",
+     "confidence": 85.0,
+     "claims": [
+      {
+       "id": "C1",
+       "kind": "numeric",
+       "text": "Revenue grew 125.8% YoY FY2024 vs FY2023",
+       "value": 1.258,
+       "unit": "ratio",
+       "op": "growth",
+       "evidence": [
+        "sec:revenue:FY2024",
+        "sec:revenue:FY2023"
+       ]
+      },
+      {
+       "id": "C2",
+       "kind": "numeric",
+       "text": "Operating margin was 54.1% in FY2024",
+       "value": 0.541,
+       "unit": "ratio",
+       "op": "ratio",
+       "evidence": [
+        "sec:operating_income:FY2024",
+        "sec:revenue:FY2024"
+       ]
+      },
+      {
+       "id": "C3",
+       "kind": "numeric",
+       "text": "Debt-to-equity ratio was 0.23 in FY2024",
+       "value": 0.226,
+       "unit": "ratio",
+       "op": "ratio",
+       "evidence": [
+        "sec:long_term_debt:FY2024",
+        "sec:equity:FY2024"
+       ]
+      },
+      {
+       "id": "C4",
+       "kind": "inference",
+       "text": "Strong revenue growth, high operating margin and low leverage support a bullish fundamental outlook",
+       "based_on": [
+        "C1",
+        "C2",
+        "C3"
+       ]
+      }
+     ],
+     "risks": [
+      "Potential slowdown in AI demand could curb revenue growth",
+      "Higher R&D spending may pressure cash flow",
+      "Macroeconomic tightening could increase financing costs"
+     ],
+     "changes": [
+      {
+       "claim": "C1",
+       "action": "kept",
+       "reason": "Revenue data present; critique misstates lack of evidence",
+       "in_response_to": [
+        "gamma.K1"
+       ]
+      },
+      {
+       "claim": "C2",
+       "action": "kept",
+       "reason": "Operating margin calculation verified; critique not directed at this claim",
+       "in_response_to": []
+      },
+      {
+       "claim": "C3",
+       "action": "kept",
+       "reason": "Debt/equity ratio calculation verified; critique not directed at this claim",
+       "in_response_to": []
+      },
+      {
+       "claim": "C4",
+       "action": "kept",
+       "reason": "Inference based on kept numeric claims; qualifiers do not overturn",
+       "in_response_to": [
+        "delta.K1",
+        "vega.K1"
+       ]
+      }
+     ],
+     "changed_by": [],
+     "stance_change": {
+      "from": "bullish",
+      "to": "bullish",
+      "reason": ""
+     }
+    }
+   },
+   "delta": {
+    "agent": "delta",
+    "state": "done",
+    "error": null,
+    "dropped_reason": null,
+    "round1": {
+     "agent": "delta",
+     "round": 1,
+     "stance": "bearish",
+     "confidence": 85.0,
+     "claims": [
+      {
+       "id": "C1",
+       "kind": "quote",
+       "text": "Nvidia CEO Jensen Huang resigned unexpectedly, raising fresh questions over hardware roadmap and financing support.",
+       "quote": "Jensen Huang resigned unexpectedly",
+       "evidence": [
+        "news:3"
+       ]
+      },
+      {
+       "id": "C2",
+       "kind": "quote",
+       "text": "Nvidia stock is down over 30 percent from highs with the CEO stepping down.",
+       "quote": "down over 30% from the highs with CEO Jensen Huang stepping down",
+       "evidence": [
+        "news:5"
+       ]
+      },
+      {
+       "id": "C3",
+       "kind": "numeric",
+       "text": "The price drawdown from the 52-week high is approximately -0.319.",
+       "value": -0.319303,
+       "unit": "ratio",
+       "op": "equals",
+       "evidence": [
+        "mkt:drawdown_from_52w_high"
+       ]
+      },
+      {
+       "id": "C4",
+       "kind": "numeric",
+       "text": "The price return over 1 month is -0.250.",
+       "value": -0.250334,
+       "unit": "ratio",
+       "op": "equals",
+       "evidence": [
+        "mkt:return_1m"
+       ]
+      },
+      {
+       "id": "C5",
+       "kind": "inference",
+       "text": "Recent news coverage is overwhelmingly negative due to the CEO resignation and subsequent sharp market pullback.",
+       "based_on": [
+        "C1",
+        "C2",
+        "C3",
+        "C4"
+       ]
+      }
+     ],
+     "risks": [
+      "Unexpected CEO resignation creates severe leadership and strategic uncertainty.",
+      "Supplier concentration and financing support risks for major partners.",
+      "Potential regulatory or governance fallout regarding past executive conduct.",
+      "Sharp double-digit negative price momentum over multiple horizons."
+     ]
+    },
+    "evidence": [
+     {
+      "id": "news:1",
+      "label": "Jim Simons\u2019 firm dumps Nvidia, reveals $2.24 billion in 2 tech stocks",
+      "value": null,
+      "unit": null,
+      "period": "2026-11-14T04:33:00Z",
+      "text": "One filing, two very different bets on tech.",
+      "source": "Unknown via yahoo_rss",
+      "url": "https://www.thestreet.com/investing/stocks/renaissance-technologies-nvidia-13f?.tsrc=rss"
+     },
+     {
+      "id": "news:2",
+      "label": "Elon Musk, Tom Lee, Shopify CEO Sign \u2018Stand With Jensen\u2019 Petition To Reinstate Him As Nvidia CEO",
+      "value": null,
+      "unit": null,
+      "period": "2026-11-14T04:24:53Z",
+      "text": "The petition, \u201cStand with Jensen,\u201d had about 36,000 signatures at the time of writing.",
+      "source": "Yahoo Finance via yahoo_rss, google_rss",
+      "url": "https://stocktwits.com/news-articles/markets/equity/elon-musk-tom-lee-stand-with-jensen-petition-reinstate-nvidia-ceo/cNb2xkrR9Qe?.tsrc=rss"
+     },
+     {
+      "id": "news:3",
+      "label": "CoreWeave (CRWV) Faces Fresh Risk After A Key Supplier Leadership Shock",
+      "value": null,
+      "unit": null,
+      "period": "2026-11-14T04:23:35Z",
+      "text": "CoreWeave (NasdaqGS:CRWV) traded through heightened swings on 13 November 2026 after Nvidia CEO Jensen Huang resigned unexpectedly. The departure raised fresh questions over Nvidia's future hardware roadmap and financing support for partners that rely on its GPUs. CoreWeave's close commercial ties to Nvidia put investor focus on supplier concentration and future contract terms following the leadership change. Jensen Huang's exit at Nvidia is important for CoreWeave, but it should sit...",
+      "source": "Unknown via yahoo_rss",
+      "url": "https://finance.yahoo.com/markets/stocks/articles/coreweave-crwv-faces-fresh-risk-042335689.html?.tsrc=rss"
+     },
+     {
+      "id": "news:4",
+      "label": "Why Liftoff Mobile Stock Soared 30% on Friday",
+      "value": null,
+      "unit": null,
+      "period": "2026-11-14T04:20:05Z",
+      "text": "App makers need users and ad revenue. Cortex helps them get both.",
+      "source": "Unknown via yahoo_rss",
+      "url": "https://www.fool.com/investing/2026/11/13/why-liftoff-mobile-stock-soared-on-friday/?.tsrc=rss"
+     },
+     {
+      "id": "news:5",
+      "label": "Nvidia CEO out \u2014 10 stocks to buy before S&P 500 hits 8,000",
+      "value": null,
+      "unit": null,
+      "period": "2026-11-14T03:33:08Z",
+      "text": "Nvidia (NVDA) is down over 30% from the highs with CEO Jensen Huang stepping down, yet Blanke Schein Wealth Management CIO Robert Schein says the stock is still a buy. He also names Broadcom (AVGO), Apple (AAPL), and Eli Lilly (LLY) among his top picks before the S&P 500 reaches 8,000.",
+      "source": "Unknown via yahoo_rss",
+      "url": "https://www.thestreet.com/video/nvidia-ceo-out-10-stock-to-buy-before-sp-500-hits-8000?.tsrc=rss"
+     },
+     {
+      "id": "news:6",
+      "label": "Can the Anthropic IPO Save the AI Rally?",
+      "value": null,
+      "unit": null,
+      "period": "2026-11-14T02:20:02Z",
+      "text": "AI stocks have had a rough month. Anthropic's debut offers some hope.",
+      "source": "The Motley Fool via yahoo_rss, nasdaq_rss",
+      "url": "https://www.fool.com/investing/2026/11/13/can-the-anthropic-ipo-save-the-ai-rally/?.tsrc=rss"
+     },
+     {
+      "id": "news:7",
+      "label": "Why SBC Medical Stock Skyrocketed on Friday",
+      "value": null,
+      "unit": null,
+      "period": "2026-11-14T01:50:29Z",
+      "text": "AI is set to boost the MSO's earnings power.",
+      "source": "Unknown via yahoo_rss",
+      "url": "https://www.fool.com/investing/2026/11/13/why-sbc-medical-stock-skyrocketed-on-friday/?.tsrc=rss"
+     },
+     {
+      "id": "news:8",
+      "label": "Can Elon Musk Bring Jensen Huang Back as Nvidia CEO?",
+      "value": null,
+      "unit": null,
+      "period": "2026-11-14T01:00:00Z",
+      "text": "Elon Musk backs a petition to reinstate Jensen Huang, but only Nvidia's board can make him CEO again. Here's what it takes.",
+      "source": "Yahoo Finance via yahoo_rss, google_rss",
+      "url": "https://beincrypto.com/elon-musk-jensen-huang-nvidia-ceo-return/?.tsrc=rss"
+     },
+     {
+      "id": "news:9",
+      "label": "Review & Preview: Moving On",
+      "value": null,
+      "unit": null,
+      "period": "2026-11-14T00:55:00Z",
+      "text": "Indexes ended the week higher despite Nvidia\u2019s dramatic slide.",
+      "source": "Unknown via yahoo_rss",
+      "url": "https://finance.yahoo.com/m/aaf2f5e5-33ee-38f6-879e-ff5ff7d5599d/review-%26-preview%3A-moving-on.html?.tsrc=rss"
+     },
+     {
+      "id": "news:10",
+      "label": "Jensen Huang Just Resigned From Nvidia. A Study of 187 Forced CEO Exits Shows What Could Happen Next",
+      "value": null,
+      "unit": null,
+      "period": "2026-11-14T00:47:00Z",
+      "text": "Jensen Huang resigned as Nvidia CEO Thursday with no permanent successor. A 2021 study of 187 forced CEO exits at S&P 1500 companies found that when a board pushes out a CEO whose stock had beaten the market, the stock falls 3.4% around the news and trails the market by 13 points at the median over three years. Here is what that means for a retiree with 8,000 shares, about $1.3 million, and the tax bill on trimming.",
+      "source": "Unknown via yahoo_rss",
+      "url": "https://247wallst.com/investing/2026/11/13/jensen-huang-just-resigned-from-nvidia-a-study-of-187-forced-ceo-exits-shows-what-could-happen-next/?.tsrc=rss"
+     },
+     {
+      "id": "news:11",
+      "label": "Dow Jones Futures: Market Rally Shaky As Nvidia Earnings, Anthropic IPO Loom; SpaceX Starship Flight 15 Booster Diverts.",
+      "value": null,
+      "unit": null,
+      "period": "2026-11-14T00:41:41Z",
+      "text": "The new market rally is isn't giving clear directions. A SpaceX Starship launch is imminent. Nvidia earnings and Anthropic IPO loom.",
+      "source": "Unknown via yahoo_rss",
+      "url": "https://finance.yahoo.com/m/53e50dc8-f137-3f6c-bfd6-912334fef9f1/dow-jones-futures%3A-market.html?.tsrc=rss"
+     },
+     {
+      "id": "news:12",
+      "label": "SpaceX\u2019s Starship Just Did Something for Only the 2nd Time. Saturday Could Be Even Bigger.",
+      "value": null,
+      "unit": null,
+      "period": "2026-11-14T00:35:01Z",
+      "text": "Starship reached orbit with 26 Starlink satellites on Flight 15, but the booster was diverted into the water and burst into flames.",
+      "source": "Unknown via yahoo_rss",
+      "url": "https://www.fool.com/investing/2026/11/13/spacex-s-starship-just-did-something-for-only-the-2nd-time-saturday-could-be-even-bigger/?.tsrc=rss"
+     },
+     {
+      "id": "news:13",
+      "label": "Is Apple Stock a Buy Right Now?",
+      "value": null,
+      "unit": null,
+      "period": "2026-11-14T00:27:00Z",
+      "text": "Apple is hitting new highs, but it could go even higher.",
+      "source": "Unknown via yahoo_rss",
+      "url": "https://www.fool.com/investing/2026/11/13/is-apple-stock-a-buy-right-now/?.tsrc=rss"
+     },
+     {
+      "id": "news:14",
+      "label": "Exclusive-Ex-Nvidia CEO misled top lawyer on affair with Chinese businesswoman, sources say [headline only]",
+      "value": null,
+      "unit": null,
+      "period": "2026-11-14T00:26:00Z",
+      "text": null,
+      "source": "Yahoo Finance via google_rss",
+      "url": "https://news.google.com/rss/articles/CBMimwFBVV95cUxPSGJqXzY3V1VFLU1BWUc0WUhCSXZlR1o5Z2lIWElkSTFscUJXcjl6TDRQTjdPZE42U1R5UUc4YjVXajlCb3hfV0FVMGJnMHFfdGNlVEhLQWEzdWxTdHNpVEdtaHplaktDVjFWVGtxYjJnYVRUVTJ2ZGRBNU9oelhZbUpRM015M1llbWNTUWRCeGR2OHppdzdwRmI2dw?oc=5"
+     },
+     {
+      "id": "news:15",
+      "label": "Scott Bessent and Lutnick clash over Nvidia chips and China",
+      "value": null,
+      "unit": null,
+      "period": "2026-11-13T23:55:29Z",
+      "text": "Treasury Secretary Bessent had one question for Howard Lutnick about Megaspeed and Nvidia. Lutnick didn\u2019t have an answer.",
+      "source": "Unknown via yahoo_rss",
+      "url": "https://www.thestreet.com/technology/scott-bessent-and-lutnick-clash-over-nvidia-chips-and-china?.tsrc=rss"
+     },
+     {
+      "id": "mkt:price",
+      "label": "Last price",
+      "value": 162.85,
+      "unit": "USD",
+      "period": "2026-11-13",
+      "text": null,
+      "source": "yfinance fast_info.last_price (fetch time in the debate's market snapshot)",
+      "url": "https://finance.yahoo.com/quote/NVDA"
+     },
+     {
+      "id": "mkt:return_5d",
+      "label": "Price return, 5 trading days",
+      "value": -0.127465,
+      "unit": "ratio",
+      "period": "2026-11-06..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "mkt:return_1m",
+      "label": "Price return, 1 month",
+      "value": -0.250334,
+      "unit": "ratio",
+      "period": "2026-10-15..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "mkt:return_3m",
+      "label": "Price return, 3 months",
+      "value": -0.275445,
+      "unit": "ratio",
+      "period": "2026-08-17..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "mkt:return_6m",
+      "label": "Price return, 6 months",
+      "value": -0.275598,
+      "unit": "ratio",
+      "period": "2026-05-15..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "mkt:return_1y",
+      "label": "Price return, 1 year",
+      "value": -0.157688,
+      "unit": "ratio",
+      "period": "2025-11-12..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "mkt:return_ytd",
+      "label": "Price return, year to date",
+      "value": -0.124766,
+      "unit": "ratio",
+      "period": "2025-12-31..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "mkt:high_52w",
+      "label": "52-week closing high (on 2026-10-06)",
+      "value": 239.24,
+      "unit": "USD",
+      "period": "2025-11-13..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "mkt:drawdown_from_52w_high",
+      "label": "Last close vs 52-week high",
+      "value": -0.319303,
+      "unit": "ratio",
+      "period": "2026-10-06..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     }
+    ],
+    "verification": {
+     "agent": "delta",
+     "round": 1,
+     "checks": [
+      {
+       "claim_id": "C1",
+       "kind": "quote",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": null,
+       "stated": null,
+       "detail": null
+      },
+      {
+       "claim_id": "C2",
+       "kind": "quote",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": null,
+       "stated": null,
+       "detail": null
+      },
+      {
+       "claim_id": "C3",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": -0.319303,
+       "stated": -0.319303,
+       "detail": null
+      },
+      {
+       "claim_id": "C4",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": -0.250334,
+       "stated": -0.250334,
+       "detail": null
+      },
+      {
+       "claim_id": "C5",
+       "kind": "inference",
+       "checkable": false,
+       "verified": true,
+       "reason": null,
+       "expected": null,
+       "stated": null,
+       "detail": null
+      }
+     ],
+     "checkable": 4,
+     "verified": 4,
+     "denominator": 4,
+     "faithfulness": 1.0
+    },
+    "final_verification": {
+     "agent": "delta",
+     "round": 3,
+     "checks": [
+      {
+       "claim_id": "C1",
+       "kind": "quote",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": null,
+       "stated": null,
+       "detail": null
+      },
+      {
+       "claim_id": "C2",
+       "kind": "quote",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": null,
+       "stated": null,
+       "detail": null
+      },
+      {
+       "claim_id": "C3",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": -0.319303,
+       "stated": -0.319303,
+       "detail": null
+      },
+      {
+       "claim_id": "C4",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": -0.250334,
+       "stated": -0.250334,
+       "detail": null
+      },
+      {
+       "claim_id": "C5",
+       "kind": "inference",
+       "checkable": false,
+       "verified": true,
+       "reason": null,
+       "expected": null,
+       "stated": null,
+       "detail": null
+      }
+     ],
+     "checkable": 4,
+     "verified": 4,
+     "denominator": 4,
+     "faithfulness": 1.0
+    },
+    "round2": {
+     "agent": "delta",
+     "round": 2,
+     "critiques": [
+      {
+       "id": "K1",
+       "target": "charlie.C4",
+       "verdict": "qualify",
+       "argument": "Fundamental strength ignores recent governance shocks and sudden leadership resignation risks reported in the news.",
+       "evidence": [
+        "news:3"
+       ]
+      },
+      {
+       "id": "K2",
+       "target": "gamma.C5",
+       "verdict": "qualify",
+       "argument": "Valuation may look attractive, but negative news coverage and CEO exit create significant near-term downside pressure.",
+       "evidence": [
+        "news:5"
+       ]
+      },
+      {
+       "id": "K3",
+       "target": "vega.C6",
+       "verdict": "support",
+       "argument": "High analyst target upside contrasts directly with recent downgrades and extreme negative sentiment in news coverage.",
+       "evidence": [
+        "news:10"
+       ]
+      }
+     ]
+    },
+    "round3": {
+     "agent": "delta",
+     "round": 3,
+     "stance": "bearish",
+     "confidence": 80.0,
+     "claims": [
+      {
+       "id": "C1",
+       "kind": "quote",
+       "text": "Nvidia CEO Jensen Huang resigned unexpectedly, raising fresh questions over hardware roadmap and financing support.",
+       "quote": "Jensen Huang resigned unexpectedly",
+       "evidence": [
+        "news:3"
+       ]
+      },
+      {
+       "id": "C2",
+       "kind": "quote",
+       "text": "Nvidia stock is down over 30 percent from highs with the CEO stepping down.",
+       "quote": "down over 30% from the highs with CEO Jensen Huang stepping down",
+       "evidence": [
+        "news:5"
+       ]
+      },
+      {
+       "id": "C3",
+       "kind": "numeric",
+       "text": "The price drawdown from the 52-week high is approximately -0.319.",
+       "value": -0.319303,
+       "unit": "ratio",
+       "op": "equals",
+       "evidence": [
+        "mkt:drawdown_from_52w_high"
+       ]
+      },
+      {
+       "id": "C4",
+       "kind": "numeric",
+       "text": "The price return over 1 month is -0.250.",
+       "value": -0.250334,
+       "unit": "ratio",
+       "op": "equals",
+       "evidence": [
+        "mkt:return_1m"
+       ]
+      },
+      {
+       "id": "C5",
+       "kind": "inference",
+       "text": "Recent news coverage is overwhelmingly negative due to the CEO resignation and subsequent sharp market pullback.",
+       "based_on": [
+        "C1",
+        "C2",
+        "C3",
+        "C4"
+       ]
+      }
+     ],
+     "risks": [
+      "Unexpected CEO resignation creates severe leadership and strategic uncertainty.",
+      "Supplier concentration and financing support risks for major partners.",
+      "Potential regulatory or governance fallout regarding past executive conduct.",
+      "Sharp double-digit negative price momentum over multiple horizons."
+     ],
+     "changes": [
+      {
+       "claim": "C1",
+       "action": "kept",
+       "reason": "News evidence confirms the CEO resignation event.",
+       "in_response_to": [
+        "charlie.K1",
+        "gamma.K2"
+       ]
+      },
+      {
+       "claim": "C3",
+       "action": "kept",
+       "reason": "Market drawdown figure is verified directly from market data.",
+       "in_response_to": [
+        "charlie.K2",
+        "vega.K2"
+       ]
+      }
+     ],
+     "changed_by": [
+      {
+       "ref": "vega.K2",
+       "reason": "Supports one-month return metrics matching negative sentiment trends."
+      }
+     ],
+     "stance_change": {
+      "from": "bearish",
+      "to": "bearish",
+      "reason": "Maintaining bearish stance due to sustained negative news and price drops."
+     }
+    }
+   },
+   "gamma": {
+    "agent": "gamma",
+    "state": "failed",
+    "error": "token budget: this agent's token share is used up (~0 tokens of room, 1166 needed)",
+    "dropped_reason": null,
+    "round1": {
+     "agent": "gamma",
+     "round": 1,
+     "stance": "bullish",
+     "confidence": 70.0,
+     "claims": [
+      {
+       "id": "C1",
+       "kind": "numeric",
+       "text": "Price/earnings ratio is 20.59x",
+       "value": 20.59,
+       "unit": "x",
+       "op": "equals",
+       "evidence": [
+        "calc:pe"
+       ]
+      },
+      {
+       "id": "C2",
+       "kind": "numeric",
+       "text": "PEG ratio is 0.23x",
+       "value": 0.23,
+       "unit": "x",
+       "op": "equals",
+       "evidence": [
+        "calc:peg"
+       ]
+      },
+      {
+       "id": "C3",
+       "kind": "numeric",
+       "text": "Net debt is negative $2.14B, indicating net cash",
+       "value": -2137000000.0,
+       "unit": "USD",
+       "op": "equals",
+       "evidence": [
+        "calc:net_debt"
+       ]
+      },
+      {
+       "id": "C4",
+       "kind": "numeric",
+       "text": "Current price is 31.9% below its 52\u2011week high",
+       "value": -0.319303,
+       "unit": "ratio",
+       "op": "equals",
+       "evidence": [
+        "mkt:drawdown_from_52w_high"
+       ]
+      },
+      {
+       "id": "C5",
+       "kind": "inference",
+       "text": "Valuation appears undervalued given low PE and PEG and strong balance sheet despite price weakness",
+       "based_on": [
+        "C1",
+        "C2",
+        "C3",
+        "C4"
+       ]
+      }
+     ],
+     "risks": [
+      "High beta (1.89) amplifies market moves",
+      "Negative Sharpe ratio (\u20110.21) indicates poor risk\u2011adjusted return",
+      "Recent price declines across 1\u2011month to 1\u2011year windows",
+      "Operating cash flow volatility may affect future cash generation"
+     ]
+    },
+    "evidence": [
+     {
+      "id": "sec:eps_diluted:FY2022",
+      "label": "Diluted EPS FY2022 (split-adjusted, /10)",
+      "value": 0.385,
+      "unit": "USD/shares",
+      "period": "2021-02-01..2022-01-30",
+      "text": null,
+      "source": "SEC XBRL EarningsPerShareDiluted, 10-K filed 2024-02-21 (accn 0001045810-24-000029); adjusted for stock splits after 2024-02-21 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/"
+     },
+     {
+      "id": "sec:eps_diluted:FY2023",
+      "label": "Diluted EPS FY2023",
+      "value": 0.17,
+      "unit": "USD/shares",
+      "period": "2022-01-31..2023-01-29",
+      "text": null,
+      "source": "SEC XBRL EarningsPerShareDiluted, 10-K filed 2025-02-26 (accn 0001045810-25-000023)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/"
+     },
+     {
+      "id": "sec:eps_diluted:FY2024",
+      "label": "Diluted EPS FY2024",
+      "value": 1.19,
+      "unit": "USD/shares",
+      "period": "2023-01-30..2024-01-28",
+      "text": null,
+      "source": "SEC XBRL EarningsPerShareDiluted, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:eps_diluted:FY2025",
+      "label": "Diluted EPS FY2025",
+      "value": 2.94,
+      "unit": "USD/shares",
+      "period": "2024-01-29..2025-01-26",
+      "text": null,
+      "source": "SEC XBRL EarningsPerShareDiluted, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:eps_diluted:FY2026",
+      "label": "Diluted EPS FY2026",
+      "value": 4.9,
+      "unit": "USD/shares",
+      "period": "2025-01-27..2026-01-25",
+      "text": null,
+      "source": "SEC XBRL EarningsPerShareDiluted, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:operating_cash_flow:FY2022",
+      "label": "Operating cash flow FY2022 (split-adjusted, x10)",
+      "value": 91080000000.0,
+      "unit": "USD",
+      "period": "2021-02-01..2022-01-30",
+      "text": null,
+      "source": "SEC XBRL NetCashProvidedByUsedInOperatingActivities, 10-K filed 2024-02-21 (accn 0001045810-24-000029); adjusted for stock splits after 2024-02-21 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/"
+     },
+     {
+      "id": "sec:operating_cash_flow:FY2023",
+      "label": "Operating cash flow FY2023",
+      "value": 5641000000.0,
+      "unit": "USD",
+      "period": "2022-01-31..2023-01-29",
+      "text": null,
+      "source": "SEC XBRL NetCashProvidedByUsedInOperatingActivities, 10-K filed 2025-02-26 (accn 0001045810-25-000023)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/"
+     },
+     {
+      "id": "sec:operating_cash_flow:FY2024",
+      "label": "Operating cash flow FY2024",
+      "value": 28090000000.0,
+      "unit": "USD",
+      "period": "2023-01-30..2024-01-28",
+      "text": null,
+      "source": "SEC XBRL NetCashProvidedByUsedInOperatingActivities, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:operating_cash_flow:FY2025",
+      "label": "Operating cash flow FY2025",
+      "value": 64089000000.0,
+      "unit": "USD",
+      "period": "2024-01-29..2025-01-26",
+      "text": null,
+      "source": "SEC XBRL NetCashProvidedByUsedInOperatingActivities, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:operating_cash_flow:FY2026",
+      "label": "Operating cash flow FY2026",
+      "value": 102718000000.0,
+      "unit": "USD",
+      "period": "2025-01-27..2026-01-25",
+      "text": null,
+      "source": "SEC XBRL NetCashProvidedByUsedInOperatingActivities, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:cash:FY2022",
+      "label": "Cash and cash equivalents FY2022 (split-adjusted, x10)",
+      "value": 19900000000.0,
+      "unit": "USD",
+      "period": "2022-01-30",
+      "text": null,
+      "source": "SEC XBRL CashAndCashEquivalentsAtCarryingValue, 10-K filed 2023-02-24 (accn 0001045810-23-000017); adjusted for stock splits after 2023-02-24 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581023000017/"
+     },
+     {
+      "id": "sec:cash:FY2023",
+      "label": "Cash and cash equivalents FY2023 (split-adjusted, x10)",
+      "value": 33890000000.0,
+      "unit": "USD",
+      "period": "2023-01-29",
+      "text": null,
+      "source": "SEC XBRL CashAndCashEquivalentsAtCarryingValue, 10-K filed 2024-02-21 (accn 0001045810-24-000029); adjusted for stock splits after 2024-02-21 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/"
+     },
+     {
+      "id": "sec:cash:FY2024",
+      "label": "Cash and cash equivalents FY2024",
+      "value": 7280000000.0,
+      "unit": "USD",
+      "period": "2024-01-28",
+      "text": null,
+      "source": "SEC XBRL CashAndCashEquivalentsAtCarryingValue, 10-K filed 2025-02-26 (accn 0001045810-25-000023)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/"
+     },
+     {
+      "id": "sec:cash:FY2025",
+      "label": "Cash and cash equivalents FY2025",
+      "value": 8589000000.0,
+      "unit": "USD",
+      "period": "2025-01-26",
+      "text": null,
+      "source": "SEC XBRL CashAndCashEquivalentsAtCarryingValue, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:cash:FY2026",
+      "label": "Cash and cash equivalents FY2026",
+      "value": 10605000000.0,
+      "unit": "USD",
+      "period": "2026-01-25",
+      "text": null,
+      "source": "SEC XBRL CashAndCashEquivalentsAtCarryingValue, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:long_term_debt:FY2022",
+      "label": "Long-term debt (incl. current portion) FY2022 (split-adjusted, x10)",
+      "value": 109460000000.0,
+      "unit": "USD",
+      "period": "2022-01-30",
+      "text": null,
+      "source": "SEC XBRL LongTermDebt, 10-K filed 2023-02-24 (accn 0001045810-23-000017); adjusted for stock splits after 2023-02-24 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581023000017/"
+     },
+     {
+      "id": "sec:long_term_debt:FY2023",
+      "label": "Long-term debt (incl. current portion) FY2023 (split-adjusted, x10)",
+      "value": 109530000000.0,
+      "unit": "USD",
+      "period": "2023-01-29",
+      "text": null,
+      "source": "SEC XBRL LongTermDebt, 10-K filed 2024-02-21 (accn 0001045810-24-000029); adjusted for stock splits after 2024-02-21 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/"
+     },
+     {
+      "id": "sec:long_term_debt:FY2024",
+      "label": "Long-term debt (incl. current portion) FY2024",
+      "value": 9709000000.0,
+      "unit": "USD",
+      "period": "2024-01-28",
+      "text": null,
+      "source": "SEC XBRL LongTermDebt, 10-K filed 2025-02-26 (accn 0001045810-25-000023)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/"
+     },
+     {
+      "id": "sec:long_term_debt:FY2025",
+      "label": "Long-term debt (incl. current portion) FY2025",
+      "value": 8463000000.0,
+      "unit": "USD",
+      "period": "2025-01-26",
+      "text": null,
+      "source": "SEC XBRL LongTermDebt, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:long_term_debt:FY2026",
+      "label": "Long-term debt (incl. current portion) FY2026",
+      "value": 8468000000.0,
+      "unit": "USD",
+      "period": "2026-01-25",
+      "text": null,
+      "source": "SEC XBRL LongTermDebt, 10-K filed 2026-02-25 (accn 0001045810-26-000021)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+     },
+     {
+      "id": "sec:commercial_paper:FY2022",
+      "label": "Commercial paper FY2022 (split-adjusted, x10)",
+      "value": 0.0,
+      "unit": "USD",
+      "period": "2022-01-30",
+      "text": null,
+      "source": "SEC XBRL CommercialPaper, 10-K filed 2022-03-18 (accn 0001045810-22-000036); adjusted for stock splits after 2022-03-18 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581022000036/"
+     },
+     {
+      "id": "sec:commercial_paper:FY2023",
+      "label": "Commercial paper FY2023 (split-adjusted, x10)",
+      "value": 0.0,
+      "unit": "USD",
+      "period": "2023-01-29",
+      "text": null,
+      "source": "SEC XBRL CommercialPaper, 10-K filed 2023-02-24 (accn 0001045810-23-000017); adjusted for stock splits after 2023-02-24 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581023000017/"
+     },
+     {
+      "id": "sec:commercial_paper:FY2024",
+      "label": "Commercial paper FY2024 (split-adjusted, x10)",
+      "value": 0.0,
+      "unit": "USD",
+      "period": "2024-01-28",
+      "text": null,
+      "source": "SEC XBRL CommercialPaper, 10-K filed 2024-02-21 (accn 0001045810-24-000029); adjusted for stock splits after 2024-02-21 (x10)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/"
+     },
+     {
+      "id": "sec:commercial_paper:FY2025",
+      "label": "Commercial paper FY2025",
+      "value": 0.0,
+      "unit": "USD",
+      "period": "2025-01-26",
+      "text": null,
+      "source": "SEC XBRL CommercialPaper, 10-K filed 2025-02-26 (accn 0001045810-25-000023)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581025000023/"
+     },
+     {
+      "id": "sec:eps_diluted:TTM",
+      "label": "Diluted EPS, trailing 12 months to 2026-07-26",
+      "value": 7.91,
+      "unit": "USD/shares",
+      "period": "2025-07-26..2026-07-26",
+      "text": null,
+      "source": "SEC XBRL EarningsPerShareDiluted: FY to 2026-01-25 + 6M to 2026-07-26 - 6M to 2025-07-27; split-adjusted",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"
+     },
+     {
+      "id": "sec:operating_cash_flow:TTM",
+      "label": "Operating cash flow, trailing 12 months to 2026-07-26",
+      "value": 134360000000.0,
+      "unit": "USD",
+      "period": "2025-07-26..2026-07-26",
+      "text": null,
+      "source": "SEC XBRL NetCashProvidedByUsedInOperatingActivities: FY to 2026-01-25 + 6M to 2026-07-26 - 6M to 2025-07-27",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/"
+     },
+     {
+      "id": "sec:shares_outstanding:latest",
+      "label": "Common shares outstanding",
+      "value": 24100000000.0,
+      "unit": "shares",
+      "period": "2026-08-21",
+      "text": null,
+      "source": "SEC XBRL dei:EntityCommonStockSharesOutstanding, 10-Q filed 2026-08-26",
+      "url": null
+     },
+     {
+      "id": "mkt:price",
+      "label": "Last price",
+      "value": 162.85,
+      "unit": "USD",
+      "period": "2026-11-13",
+      "text": null,
+      "source": "yfinance fast_info.last_price (fetch time in the debate's market snapshot)",
+      "url": "https://finance.yahoo.com/quote/NVDA"
+     },
+     {
+      "id": "mkt:price_1y_ago",
+      "label": "Close one year ago (start of 1y window)",
+      "value": 186.4134,
+      "unit": "USD",
+      "period": "2025-11-13",
+      "text": null,
+      "source": "yfinance history",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "mkt:shares_outstanding",
+      "label": "Shares outstanding (yfinance)",
+      "value": 24147000000.0,
+      "unit": "shares",
+      "period": "2026-11-13",
+      "text": null,
+      "source": "yfinance fast_info.shares",
+      "url": "https://finance.yahoo.com/quote/NVDA"
+     },
+     {
+      "id": "mkt:risk_free_rate",
+      "label": "10-year Treasury yield",
+      "value": 0.05154,
+      "unit": "ratio",
+      "period": "2026-11-13",
+      "text": null,
+      "source": "yfinance ^TNX / 100",
+      "url": "https://finance.yahoo.com/quote/%5ETNX"
+     },
+     {
+      "id": "mkt:return_5d",
+      "label": "Price return, 5 trading days",
+      "value": -0.127465,
+      "unit": "ratio",
+      "period": "2026-11-06..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "mkt:return_1m",
+      "label": "Price return, 1 month",
+      "value": -0.250334,
+      "unit": "ratio",
+      "period": "2026-10-15..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "mkt:return_3m",
+      "label": "Price return, 3 months",
+      "value": -0.275445,
+      "unit": "ratio",
+      "period": "2026-08-17..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "mkt:return_6m",
+      "label": "Price return, 6 months",
+      "value": -0.275598,
+      "unit": "ratio",
+      "period": "2026-05-15..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "mkt:return_1y",
+      "label": "Price return, 1 year",
+      "value": -0.157688,
+      "unit": "ratio",
+      "period": "2025-11-12..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "mkt:return_ytd",
+      "label": "Price return, year to date",
+      "value": -0.124766,
+      "unit": "ratio",
+      "period": "2025-12-31..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "mkt:high_52w",
+      "label": "52-week closing high (on 2026-10-06)",
+      "value": 239.24,
+      "unit": "USD",
+      "period": "2025-11-13..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "mkt:drawdown_from_52w_high",
+      "label": "Last close vs 52-week high",
+      "value": -0.319303,
+      "unit": "ratio",
+      "period": "2026-10-06..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "quant:returns.vol_annual",
+      "label": "Annualised volatility of daily returns",
+      "value": 0.3874961887851557,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (descriptive): sample sd of daily simple returns x sqrt(252); n=252 observations",
+      "url": null
+     },
+     {
+      "id": "quant:returns.skew",
+      "label": "Skewness of daily returns",
+      "value": -0.019219444681802676,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (descriptive): adjusted sample skewness; n=252 observations",
+      "url": null
+     },
+     {
+      "id": "quant:returns.excess_kurtosis",
+      "label": "Excess kurtosis of daily returns",
+      "value": 1.0392118715937855,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (descriptive): adjusted sample excess kurtosis (normal = 0); n=252 observations",
+      "url": null
+     },
+     {
+      "id": "quant:returns.max_drawdown",
+      "label": "Maximum drawdown",
+      "value": -0.31930278229253417,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (descriptive): min of price / running peak - 1; n=252 observations",
+      "url": null
+     },
+     {
+      "id": "quant:returns.var95_hist",
+      "label": "1-day 95% Value at Risk (historical)",
+      "value": 0.04190298598719445,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (descriptive): -(5th percentile of daily returns); n=252 observations",
+      "url": null
+     },
+     {
+      "id": "quant:returns.var95_normal",
+      "label": "1-day 95% Value at Risk (normal)",
+      "value": 0.040534302061819905,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (model): -(mean + z_0.05 x sd), assumes normally distributed returns; n=252 observations",
+      "url": null
+     },
+     {
+      "id": "quant:market.beta",
+      "label": "Beta vs S&P 500",
+      "value": 1.8909980673314009,
+      "unit": "x",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (descriptive): OLS slope of daily stock returns on S&P 500 returns; n=500 observations",
+      "url": null
+     },
+     {
+      "id": "quant:market.beta_se",
+      "label": "Standard error of beta",
+      "value": 0.08739036784832367,
+      "unit": "x",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (descriptive): classical OLS standard error of the slope; n=500 observations",
+      "url": null
+     },
+     {
+      "id": "quant:market.correlation",
+      "label": "Correlation with S&P 500",
+      "value": 0.6961266762097568,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (descriptive): Pearson correlation of daily returns; n=500 observations",
+      "url": null
+     },
+     {
+      "id": "quant:market.alpha_daily",
+      "label": "OLS intercept (daily)",
+      "value": -0.00039792463694094266,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (descriptive): OLS intercept of daily returns; n=500 observations",
+      "url": null
+     },
+     {
+      "id": "quant:capm.discount_rate",
+      "label": "CAPM discount rate",
+      "value": 0.14609,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (model): risk-free + clamp(beta, [0.5, 2.0]) x 5% ERP, clamped to [0.06, 0.15]; n=500 observations",
+      "url": null
+     },
+     {
+      "id": "quant:forward.prob_up_bootstrap",
+      "label": "P(price above today in 63 trading days), bootstrap",
+      "value": 0.5415,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (prediction): moving-block bootstrap, block 5, 10000 paths of 63 days, trend removed (log returns de-meaned); seed 43; interval: 200 resampled histories x 2000 paths; n=10000 simulations",
+      "url": null
+     },
+     {
+      "id": "quant:forward.prob_up_bootstrap.low",
+      "label": "P(price above today in 63 trading days), bootstrap, 90% interval low",
+      "value": 0.464975,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (prediction): moving-block bootstrap, block 5, 10000 paths of 63 days, trend removed (log returns de-meaned); seed 43; interval: 200 resampled histories x 2000 paths; n=10000 simulations",
+      "url": null
+     },
+     {
+      "id": "quant:forward.prob_up_bootstrap.high",
+      "label": "P(price above today in 63 trading days), bootstrap, 90% interval high",
+      "value": 0.5365249999999999,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (prediction): moving-block bootstrap, block 5, 10000 paths of 63 days, trend removed (log returns de-meaned); seed 43; interval: 200 resampled histories x 2000 paths; n=10000 simulations",
+      "url": null
+     },
+     {
+      "id": "quant:forward.prob_up_normal",
+      "label": "P(price above today in 63 trading days), normal",
+      "value": 0.5,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (prediction): i.i.d. normal log returns over 63 days, trend removed (log returns de-meaned); interval from mean +/- 1.645 sd/sqrt(n); n=252 observations",
+      "url": null
+     },
+     {
+      "id": "quant:forward.prob_up_normal.low",
+      "label": "P(price above today in 63 trading days), normal, 90% interval low",
+      "value": 0.5,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (prediction): i.i.d. normal log returns over 63 days, trend removed (log returns de-meaned); interval from mean +/- 1.645 sd/sqrt(n); n=252 observations",
+      "url": null
+     },
+     {
+      "id": "quant:forward.prob_up_normal.high",
+      "label": "P(price above today in 63 trading days), normal, 90% interval high",
+      "value": 0.5,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (prediction): i.i.d. normal log returns over 63 days, trend removed (log returns de-meaned); interval from mean +/- 1.645 sd/sqrt(n); n=252 observations",
+      "url": null
+     },
+     {
+      "id": "quant:forward.return_p5",
+      "label": "63-day return, 5th percentile (bootstrap)",
+      "value": -0.2533355483635753,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (prediction): moving-block bootstrap, block 5, 10000 paths of 63 days, trend removed (log returns de-meaned); seed 43; n=10000 simulations",
+      "url": null
+     },
+     {
+      "id": "quant:forward.return_p50",
+      "label": "63-day return, median (bootstrap)",
+      "value": 0.0198330461241674,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (prediction): moving-block bootstrap, block 5, 10000 paths of 63 days, trend removed (log returns de-meaned); seed 43; n=10000 simulations",
+      "url": null
+     },
+     {
+      "id": "quant:forward.return_p95",
+      "label": "63-day return, 95th percentile (bootstrap)",
+      "value": 0.37943230958702656,
+      "unit": "ratio",
+      "period": "2026-11-14",
+      "text": null,
+      "source": "quant layer (prediction): moving-block bootstrap, block 5, 10000 paths of 63 days, trend removed (log returns de-meaned); seed 43; n=10000 simulations",
+      "url": null
+     },
+     {
+      "id": "assumption:equity_risk_premium",
+      "label": "Equity risk premium",
+      "value": 0.05,
+      "unit": "ratio",
+      "period": null,
+      "text": null,
+      "source": "computed: config/thresholds.yaml capm.equity_risk_premium",
+      "url": null
+     },
+     {
+      "id": "assumption:terminal_growth",
+      "label": "Terminal growth",
+      "value": 0.025,
+      "unit": "ratio",
+      "period": null,
+      "text": null,
+      "source": "computed: config/thresholds.yaml capm.terminal_growth",
+      "url": null
+     },
+     {
+      "id": "assumption:discount_rate",
+      "label": "Discount rate (CAPM)",
+      "value": 0.14609,
+      "unit": "ratio",
+      "period": null,
+      "text": null,
+      "source": "computed: quant:capm.discount_rate (CAPM from quant:market.beta and mkt:risk_free_rate)",
+      "url": null
+     },
+     {
+      "id": "calc:pe",
+      "label": "Price / diluted EPS (trailing 12 months)",
+      "value": 20.59,
+      "unit": "x",
+      "period": "2025-07-26..2026-07-26",
+      "text": null,
+      "source": "computed: mkt:price / sec:eps_diluted:TTM",
+      "url": null
+     },
+     {
+      "id": "calc:eps_cagr",
+      "label": "Diluted EPS CAGR over 4y",
+      "value": 0.888791,
+      "unit": "ratio",
+      "period": null,
+      "text": null,
+      "source": "computed: (sec:eps_diluted:FY2026 / sec:eps_diluted:FY2022)^(1/n) - 1",
+      "url": null
+     },
+     {
+      "id": "calc:peg",
+      "label": "PE / EPS growth (%)",
+      "value": 0.23,
+      "unit": "x",
+      "period": null,
+      "text": null,
+      "source": "computed: calc:pe / (calc:eps_cagr * 100)",
+      "url": null
+     },
+     {
+      "id": "calc:net_debt",
+      "label": "Net debt",
+      "value": -2137000000.0,
+      "unit": "USD",
+      "period": null,
+      "text": null,
+      "source": "computed: sec:long_term_debt:FY2026 + sec:commercial_paper:FY2025 - sec:cash:FY2026",
+      "url": null
+     },
+     {
+      "id": "calc:sharpe",
+      "label": "Sharpe ratio (rf 2%)",
+      "value": -0.21,
+      "unit": "x",
+      "period": "2025-11-13..2026-11-13",
+      "text": null,
+      "source": "computed: (mean daily return * 252 - 0.02) / annualised volatility",
+      "url": null
+     },
+     {
+      "id": "calc:ma_50",
+      "label": "50-day moving average",
+      "value": 214.63,
+      "unit": "USD",
+      "period": "2025-11-13..2026-11-13",
+      "text": null,
+      "source": "computed: mean of last 50 closes",
+      "url": null
+     },
+     {
+      "id": "calc:ma_200",
+      "label": "200-day moving average",
+      "value": 203.92,
+      "unit": "USD",
+      "period": "2025-11-13..2026-11-13",
+      "text": null,
+      "source": "computed: mean of last 200 closes",
+      "url": null
+     }
+    ],
+    "verification": {
+     "agent": "gamma",
+     "round": 1,
+     "checks": [
+      {
+       "claim_id": "C1",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 20.59,
+       "stated": 20.59,
+       "detail": null
+      },
+      {
+       "claim_id": "C2",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 0.23,
+       "stated": 0.23,
+       "detail": null
+      },
+      {
+       "claim_id": "C3",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": -2137000000.0,
+       "stated": -2137000000.0,
+       "detail": null
+      },
+      {
+       "claim_id": "C4",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": -0.319303,
+       "stated": -0.319303,
+       "detail": null
+      },
+      {
+       "claim_id": "C5",
+       "kind": "inference",
+       "checkable": false,
+       "verified": true,
+       "reason": null,
+       "expected": null,
+       "stated": null,
+       "detail": null
+      }
+     ],
+     "checkable": 4,
+     "verified": 4,
+     "denominator": 4,
+     "faithfulness": 1.0
+    },
+    "final_verification": null,
+    "round2": {
+     "agent": "gamma",
+     "round": 2,
+     "critiques": [
+      {
+       "id": "K1",
+       "target": "charlie.C1",
+       "verdict": "dispute",
+       "argument": "Revenue growth claim lacks supporting data in provided evidence set",
+       "evidence": [
+        "calc:eps_cagr"
+       ]
+      },
+      {
+       "id": "K2",
+       "target": "delta.C1",
+       "verdict": "dispute",
+       "argument": "No news evidence provided to confirm CEO resignation claim",
+       "evidence": [
+        "sec:cash:FY2024"
+       ]
+      },
+      {
+       "id": "K3",
+       "target": "vega.C1",
+       "verdict": "dispute",
+       "argument": "Analyst target upside claim not backed by any cited evidence",
+       "evidence": [
+        "quant:market.beta"
+       ]
+      }
+     ]
+    },
+    "round3": null
+   },
+   "vega": {
+    "agent": "vega",
+    "state": "done",
+    "error": null,
+    "dropped_reason": null,
+    "round1": {
+     "agent": "vega",
+     "round": 1,
+     "stance": "neutral",
+     "confidence": 65.0,
+     "claims": [
+      {
+       "id": "C1",
+       "kind": "numeric",
+       "text": "Analyst mean price target implies significant upside relative to current price",
+       "value": 0.739684,
+       "unit": "ratio",
+       "op": "equals",
+       "evidence": [
+        "cat:target_mean_upside"
+       ]
+      },
+      {
+       "id": "C2",
+       "kind": "numeric",
+       "text": "Analyst sentiment has weakened with 10 downgrades in the last 30 days",
+       "value": 10.0,
+       "unit": "count",
+       "op": "equals",
+       "evidence": [
+        "cat:downgrades_30d"
+       ]
+      },
+      {
+       "id": "C3",
+       "kind": "numeric",
+       "text": "Analysts cut price targets 19 times in the last 30 days",
+       "value": 19.0,
+       "unit": "count",
+       "op": "equals",
+       "evidence": [
+        "cat:target_cuts_30d"
+       ]
+      },
+      {
+       "id": "C4",
+       "kind": "numeric",
+       "text": "Options market implies high at-the-money volatility ahead of earnings in 5 days",
+       "value": 0.92505,
+       "unit": "ratio",
+       "op": "equals",
+       "evidence": [
+        "cat:implied_vol_atm"
+       ]
+      },
+      {
+       "id": "C5",
+       "kind": "numeric",
+       "text": "Options market implies earnings move of about 8.6 percent",
+       "value": 0.086276,
+       "unit": "ratio",
+       "op": "equals",
+       "evidence": [
+        "cat:implied_move"
+       ]
+      },
+      {
+       "id": "C6",
+       "kind": "inference",
+       "text": "High mean target upside contrasts with recent negative rating and target revisions, keeping near-term direction balanced.",
+       "based_on": [
+        "C1",
+        "C2",
+        "C3"
+       ]
+      },
+      {
+       "id": "C7",
+       "kind": "inference",
+       "text": "Upcoming earnings report in 5 days is the main near-term catalyst with significant implied stock move.",
+       "based_on": [
+        "C4",
+        "C5"
+       ]
+      }
+     ],
+     "risks": [
+      "Recent 10 downgrades signals deteriorating analyst sentiment.",
+      "19 price target cuts indicate lowering near-term analyst expectations.",
+      "High options implied volatility reflects elevated earnings event risk."
+     ]
+    },
+    "evidence": [
+     {
+      "id": "mkt:price",
+      "label": "Last price",
+      "value": 162.85,
+      "unit": "USD",
+      "period": "2026-11-13",
+      "text": null,
+      "source": "yfinance fast_info.last_price (fetch time in the debate's market snapshot)",
+      "url": "https://finance.yahoo.com/quote/NVDA"
+     },
+     {
+      "id": "mkt:return_1m",
+      "label": "Price return, 1 month",
+      "value": -0.250334,
+      "unit": "ratio",
+      "period": "2026-10-15..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "mkt:return_3m",
+      "label": "Price return, 3 months",
+      "value": -0.275445,
+      "unit": "ratio",
+      "period": "2026-08-17..2026-11-13",
+      "text": null,
+      "source": "yfinance daily closes (split-adjusted)",
+      "url": "https://finance.yahoo.com/quote/NVDA/history"
+     },
+     {
+      "id": "cat:days_to_earnings",
+      "label": "Days to next earnings report (2026-11-18)",
+      "value": 5.0,
+      "unit": "days",
+      "period": "2026-11-13..2026-11-18",
+      "text": null,
+      "source": "yfinance calendar 'Earnings Date'",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:eps_estimate_next",
+      "label": "Consensus EPS, next report",
+      "value": 2.47121,
+      "unit": "USD/shares",
+      "period": "2026-11-18",
+      "text": null,
+      "source": "yfinance calendar",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:eps_estimate_low",
+      "label": "Lowest EPS estimate, next report",
+      "value": 2.25754,
+      "unit": "USD/shares",
+      "period": "2026-11-18",
+      "text": null,
+      "source": "yfinance calendar",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:eps_estimate_high",
+      "label": "Highest EPS estimate, next report",
+      "value": 2.7,
+      "unit": "USD/shares",
+      "period": "2026-11-18",
+      "text": null,
+      "source": "yfinance calendar",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:revenue_estimate_next",
+      "label": "Consensus revenue, next report",
+      "value": 108731903900.0,
+      "unit": "USD",
+      "period": "2026-11-18",
+      "text": null,
+      "source": "yfinance calendar",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:target_mean",
+      "label": "Analyst price target, mean",
+      "value": 283.3076,
+      "unit": "USD",
+      "period": "2026-11-13",
+      "text": null,
+      "source": "yfinance analyst_price_targets",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:target_median",
+      "label": "Analyst price target, median",
+      "value": 275.0,
+      "unit": "USD",
+      "period": "2026-11-13",
+      "text": null,
+      "source": "yfinance analyst_price_targets",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:target_high",
+      "label": "Analyst price target, high",
+      "value": 515.0,
+      "unit": "USD",
+      "period": "2026-11-13",
+      "text": null,
+      "source": "yfinance analyst_price_targets",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:target_low",
+      "label": "Analyst price target, low",
+      "value": 174.0,
+      "unit": "USD",
+      "period": "2026-11-13",
+      "text": null,
+      "source": "yfinance analyst_price_targets",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:target_mean_upside",
+      "label": "Mean analyst target vs snapshot price",
+      "value": 0.739684,
+      "unit": "ratio",
+      "period": "2026-11-13",
+      "text": null,
+      "source": "computed: cat:target_mean / mkt:price - 1",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:buy_rating_share",
+      "label": "Share of analysts rating Buy, this month",
+      "value": 0.786885,
+      "unit": "ratio",
+      "period": "0m",
+      "text": null,
+      "source": "yfinance recommendations (strongBuy + buy) / all",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:buy_rating_share_3m_ago",
+      "label": "Share of analysts rating Buy, 3 months ago",
+      "value": 0.95,
+      "unit": "ratio",
+      "period": "-3m",
+      "text": null,
+      "source": "yfinance recommendations (strongBuy + buy) / all",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:upgrades_30d",
+      "label": "Analyst upgrades, last 30 days",
+      "value": 0.0,
+      "unit": "count",
+      "period": "2026-10-14..2026-11-13",
+      "text": null,
+      "source": "yfinance upgrades_downgrades",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:downgrades_30d",
+      "label": "Analyst downgrades, last 30 days",
+      "value": 10.0,
+      "unit": "count",
+      "period": "2026-10-14..2026-11-13",
+      "text": null,
+      "source": "yfinance upgrades_downgrades",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:target_raises_30d",
+      "label": "Price-target raises, last 30 days",
+      "value": 0.0,
+      "unit": "count",
+      "period": "2026-10-14..2026-11-13",
+      "text": null,
+      "source": "yfinance upgrades_downgrades",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:target_cuts_30d",
+      "label": "Price-target cuts, last 30 days",
+      "value": 19.0,
+      "unit": "count",
+      "period": "2026-10-14..2026-11-13",
+      "text": null,
+      "source": "yfinance upgrades_downgrades",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:eps_revisions_up_30d",
+      "label": "Upward EPS estimate revisions (this FY), last 30 days",
+      "value": 2.0,
+      "unit": "count",
+      "period": "2026-10-14..2026-11-13",
+      "text": null,
+      "source": "yfinance eps_revisions",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:eps_revisions_down_30d",
+      "label": "Downward EPS estimate revisions (this FY), last 30 days",
+      "value": 0.0,
+      "unit": "count",
+      "period": "2026-10-14..2026-11-13",
+      "text": null,
+      "source": "yfinance eps_revisions",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:implied_vol_atm",
+      "label": "At-the-money implied volatility (first expiry after earnings, strike 162.5)",
+      "value": 0.92505,
+      "unit": "ratio",
+      "period": "2026-11-13..2026-11-18",
+      "text": null,
+      "source": "yfinance option_chain",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     },
+     {
+      "id": "cat:implied_move",
+      "label": "Options-implied move to 2026-11-18 (ATM straddle / price)",
+      "value": 0.086276,
+      "unit": "ratio",
+      "period": "2026-11-13..2026-11-18",
+      "text": null,
+      "source": "computed: (call mid + put mid) / mkt:price",
+      "url": "https://finance.yahoo.com/quote/NVDA/analysis"
+     }
+    ],
+    "verification": {
+     "agent": "vega",
+     "round": 1,
+     "checks": [
+      {
+       "claim_id": "C1",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 0.739684,
+       "stated": 0.739684,
+       "detail": null
+      },
+      {
+       "claim_id": "C2",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 10.0,
+       "stated": 10.0,
+       "detail": null
+      },
+      {
+       "claim_id": "C3",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 19.0,
+       "stated": 19.0,
+       "detail": null
+      },
+      {
+       "claim_id": "C4",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 0.92505,
+       "stated": 0.92505,
+       "detail": null
+      },
+      {
+       "claim_id": "C5",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 0.086276,
+       "stated": 0.086276,
+       "detail": null
+      },
+      {
+       "claim_id": "C6",
+       "kind": "inference",
+       "checkable": false,
+       "verified": true,
+       "reason": null,
+       "expected": null,
+       "stated": null,
+       "detail": null
+      },
+      {
+       "claim_id": "C7",
+       "kind": "inference",
+       "checkable": false,
+       "verified": true,
+       "reason": null,
+       "expected": null,
+       "stated": null,
+       "detail": null
+      }
+     ],
+     "checkable": 5,
+     "verified": 5,
+     "denominator": 5,
+     "faithfulness": 1.0
+    },
+    "final_verification": {
+     "agent": "vega",
+     "round": 3,
+     "checks": [
+      {
+       "claim_id": "C1",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 0.739684,
+       "stated": 0.739684,
+       "detail": null
+      },
+      {
+       "claim_id": "C2",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 10.0,
+       "stated": 10.0,
+       "detail": null
+      },
+      {
+       "claim_id": "C3",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 19.0,
+       "stated": 19.0,
+       "detail": null
+      },
+      {
+       "claim_id": "C4",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 0.92505,
+       "stated": 0.92505,
+       "detail": null
+      },
+      {
+       "claim_id": "C5",
+       "kind": "numeric",
+       "checkable": true,
+       "verified": true,
+       "reason": null,
+       "expected": 0.086276,
+       "stated": 0.086276,
+       "detail": null
+      },
+      {
+       "claim_id": "C6",
+       "kind": "inference",
+       "checkable": false,
+       "verified": true,
+       "reason": null,
+       "expected": null,
+       "stated": null,
+       "detail": null
+      },
+      {
+       "claim_id": "C7",
+       "kind": "inference",
+       "checkable": false,
+       "verified": true,
+       "reason": null,
+       "expected": null,
+       "stated": null,
+       "detail": null
+      }
+     ],
+     "checkable": 5,
+     "verified": 5,
+     "denominator": 5,
+     "faithfulness": 1.0
+    },
+    "round2": {
+     "agent": "vega",
+     "round": 2,
+     "critiques": [
+      {
+       "id": "K1",
+       "target": "charlie.C4",
+       "verdict": "qualify",
+       "argument": "Historical fundamentals ignore near-term catalyst risk with earnings in 5 days and 19 target cuts.",
+       "evidence": [
+        "cat:days_to_earnings",
+        "cat:target_cuts_30d"
+       ]
+      },
+      {
+       "id": "K2",
+       "target": "delta.C4",
+       "verdict": "support",
+       "argument": "Confirms 1-month return of -0.250334 ratio, matching 10 analyst downgrades in last 30 days.",
+       "evidence": [
+        "mkt:return_1m",
+        "cat:downgrades_30d"
+       ]
+      },
+      {
+       "id": "K3",
+       "target": "gamma.C5",
+       "verdict": "qualify",
+       "argument": "Valuation thesis ignores near-term earnings in 5 days and high options implied volatility of 0.92505 ratio.",
+       "evidence": [
+        "cat:days_to_earnings",
+        "cat:implied_vol_atm"
+       ]
+      }
+     ]
+    },
+    "round3": {
+     "agent": "vega",
+     "round": 3,
+     "stance": "neutral",
+     "confidence": 65.0,
+     "claims": [
+      {
+       "id": "C1",
+       "kind": "numeric",
+       "text": "Analyst mean price target implies significant upside relative to current price",
+       "value": 0.739684,
+       "unit": "ratio",
+       "op": "equals",
+       "evidence": [
+        "cat:target_mean_upside"
+       ]
+      },
+      {
+       "id": "C2",
+       "kind": "numeric",
+       "text": "Analyst sentiment has weakened with 10 downgrades in the last 30 days",
+       "value": 10.0,
+       "unit": "count",
+       "op": "equals",
+       "evidence": [
+        "cat:downgrades_30d"
+       ]
+      },
+      {
+       "id": "C3",
+       "kind": "numeric",
+       "text": "Analysts cut price targets 19 times in the last 30 days",
+       "value": 19.0,
+       "unit": "count",
+       "op": "equals",
+       "evidence": [
+        "cat:target_cuts_30d"
+       ]
+      },
+      {
+       "id": "C4",
+       "kind": "numeric",
+       "text": "Options market implies high at-the-money volatility ahead of earnings in 5 days",
+       "value": 0.92505,
+       "unit": "ratio",
+       "op": "equals",
+       "evidence": [
+        "cat:implied_vol_atm"
+       ]
+      },
+      {
+       "id": "C5",
+       "kind": "numeric",
+       "text": "Options market implies earnings move of about 8.6 percent",
+       "value": 0.086276,
+       "unit": "ratio",
+       "op": "equals",
+       "evidence": [
+        "cat:implied_move"
+       ]
+      },
+      {
+       "id": "C6",
+       "kind": "inference",
+       "text": "High mean target upside contrasts with recent negative rating and target revisions, keeping near-term direction balanced.",
+       "based_on": [
+        "C1",
+        "C2",
+        "C3"
+       ]
+      },
+      {
+       "id": "C7",
+       "kind": "inference",
+       "text": "Upcoming earnings report in 5 days is the main near-term catalyst with significant implied stock move.",
+       "based_on": [
+        "C4",
+        "C5"
+       ]
+      }
+     ],
+     "risks": [
+      "Recent 10 downgrades signals deteriorating analyst sentiment.",
+      "19 price target cuts indicate lowering near-term analyst expectations.",
+      "High options implied volatility reflects elevated earnings event risk."
+     ],
+     "changes": [
+      {
+       "claim": "C1",
+       "action": "kept",
+       "reason": "Data in cat:target_mean_upside is verified and accurate in provided evidence context.",
+       "in_response_to": [
+        "charlie.K4",
+        "gamma.K3"
+       ]
+      },
+      {
+       "claim": "C6",
+       "action": "kept",
+       "reason": "Disagree with critique; target upside and downgrades both come from valid catalyst dataset.",
+       "in_response_to": [
+        "delta.K3"
+       ]
+      }
+     ],
+     "changed_by": [],
+     "stance_change": {
+      "from": "neutral",
+      "to": "neutral",
+      "reason": ""
+     }
+    }
+   }
+  },
+  "llm_calls": [
+   {
+    "agent": "charlie",
+    "round": 1,
+    "ok": true,
+    "total_tokens": 3953,
+    "prompt_tokens": 3186,
+    "candidates_tokens": 300,
+    "reasoning_tokens": 467,
+    "cached_tokens": 0,
+    "models": [
+     "groq:openai/gpt-oss-120b"
+    ],
+    "error_type": null,
+    "repaired_from": null
+   },
+   {
+    "agent": "delta",
+    "round": 1,
+    "ok": true,
+    "total_tokens": 3037,
+    "prompt_tokens": 2487,
+    "candidates_tokens": 550,
+    "reasoning_tokens": 0,
+    "cached_tokens": 0,
+    "models": [
+     "gemini:gemini-3.5-flash-lite"
+    ],
+    "error_type": null,
+    "repaired_from": null
+   },
+   {
+    "agent": "gamma",
+    "round": 1,
+    "ok": true,
+    "total_tokens": 5018,
+    "prompt_tokens": 4282,
+    "candidates_tokens": 478,
+    "reasoning_tokens": 258,
+    "cached_tokens": 0,
+    "models": [
+     "groq:openai/gpt-oss-120b"
+    ],
+    "error_type": null,
+    "repaired_from": null
+   },
+   {
+    "agent": "vega",
+    "round": 1,
+    "ok": true,
+    "total_tokens": 2630,
+    "prompt_tokens": 1959,
+    "candidates_tokens": 671,
+    "reasoning_tokens": 0,
+    "cached_tokens": 0,
+    "models": [
+     "gemini:gemini-3.5-flash"
+    ],
+    "error_type": null,
+    "repaired_from": null
+   },
+   {
+    "agent": "charlie",
+    "round": 2,
+    "ok": true,
+    "total_tokens": 8024,
+    "prompt_tokens": 7013,
+    "candidates_tokens": 615,
+    "reasoning_tokens": 396,
+    "cached_tokens": 0,
+    "models": [
+     "groq:openai/gpt-oss-120b",
+     "groq:openai/gpt-oss-120b"
+    ],
+    "error_type": null,
+    "repaired_from": "schema violation: [{'type': 'too_short', 'loc': ('critiques', 0, 'evidence'), 'msg': 'List should have at least 1 item after validation, not 0', 'input': [], 'ctx': {'field_type': 'List', 'min_length': 1, 'actual_length': 0}}, {'type': 'too_short', 'loc': ('critiques', 1, 'evidence'), 'msg': 'List should have at least 1 item after validation, not 0', 'input': [], 'ctx': {'field_type': 'List', 'min_length': 1, 'actual_length': 0}}, {'type': 'too_short', 'loc': ('critiques', 3, 'evidence'), 'msg': 'List should have at least 1 item after validation, not 0', 'input': [], 'ctx': {'field_type': 'List', 'min_length': 1, 'actual_length': 0}}]"
+   },
+   {
+    "agent": "delta",
+    "round": 2,
+    "ok": true,
+    "total_tokens": 4905,
+    "prompt_tokens": 4645,
+    "candidates_tokens": 260,
+    "reasoning_tokens": 0,
+    "cached_tokens": 0,
+    "models": [
+     "gemini:gemini-3.5-flash-lite"
+    ],
+    "error_type": null,
+    "repaired_from": null
+   },
+   {
+    "agent": "gamma",
+    "round": 2,
+    "ok": true,
+    "total_tokens": 8224,
+    "prompt_tokens": 7756,
+    "candidates_tokens": 285,
+    "reasoning_tokens": 183,
+    "cached_tokens": 512,
+    "models": [
+     "groq:openai/gpt-oss-120b",
+     "groq:openai/gpt-oss-120b"
+    ],
+    "error_type": null,
+    "repaired_from": "schema violation: [{'type': 'too_short', 'loc': ('critiques', 0, 'evidence'), 'msg': 'List should have at least 1 item after validation, not 0', 'input': [], 'ctx': {'field_type': 'List', 'min_length': 1, 'actual_length': 0}}, {'type': 'too_short', 'loc': ('critiques', 1, 'evidence'), 'msg': 'List should have at least 1 item after validation, not 0', 'input': [], 'ctx': {'field_type': 'List', 'min_length': 1, 'actual_length': 0}}, {'type': 'too_short', 'loc': ('critiques', 2, 'evidence'), 'msg': 'List should have at least 1 item after validation, not 0', 'input': [], 'ctx': {'field_type': 'List', 'min_length': 1, 'actual_length': 0}}]"
+   },
+   {
+    "agent": "vega",
+    "round": 2,
+    "ok": true,
+    "total_tokens": 5640,
+    "prompt_tokens": 4231,
+    "candidates_tokens": 218,
+    "reasoning_tokens": 1191,
+    "cached_tokens": 0,
+    "models": [
+     "gemini:gemini-3.5-flash"
+    ],
+    "error_type": null,
+    "repaired_from": null
+   },
+   {
+    "agent": "charlie",
+    "round": 3,
+    "ok": true,
+    "total_tokens": 6814,
+    "prompt_tokens": 6237,
+    "candidates_tokens": 458,
+    "reasoning_tokens": 119,
+    "cached_tokens": 0,
+    "models": [
+     "groq:openai/gpt-oss-120b"
+    ],
+    "error_type": null,
+    "repaired_from": null
+   },
+   {
+    "agent": "delta",
+    "round": 3,
+    "ok": true,
+    "total_tokens": 8303,
+    "prompt_tokens": 6748,
+    "candidates_tokens": 1555,
+    "reasoning_tokens": 0,
+    "cached_tokens": 0,
+    "models": [
+     "gemini:gemini-3.5-flash-lite",
+     "gemini:gemini-3.5-flash-lite"
+    ],
+    "error_type": null,
+    "repaired_from": "critiques not answered in changes: ['gamma.K2', 'vega.K2']"
+   },
+   {
+    "agent": "gamma",
+    "round": 3,
+    "ok": false,
+    "total_tokens": 0,
+    "prompt_tokens": 0,
+    "candidates_tokens": 0,
+    "reasoning_tokens": 0,
+    "cached_tokens": 0,
+    "models": [],
+    "error_type": "budget",
+    "repaired_from": null
+   },
+   {
+    "agent": "vega",
+    "round": 3,
+    "ok": true,
+    "total_tokens": 5744,
+    "prompt_tokens": 4823,
+    "candidates_tokens": 921,
+    "reasoning_tokens": 0,
+    "cached_tokens": 0,
+    "models": [
+     "gemini:gemini-3.5-flash"
+    ],
+    "error_type": null,
+    "repaired_from": null
+   }
+  ],
+  "token_budget": {
+   "total": 70000,
+   "reserve": 14000,
+   "reserve_left": 4850,
+   "agents": {
+    "charlie": {
+     "share": 14700,
+     "used": 18791
+    },
+    "delta": {
+     "share": 11900,
+     "used": 16245
+    },
+    "gamma": {
+     "share": 16100,
+     "used": 13242
+    },
+    "vega": {
+     "share": 13300,
+     "used": 14014
+    }
+   }
+  },
+  "market_snapshot": {
+   "fetched_at": "2026-11-14T05:03:14Z",
+   "market_date": "2026-11-13",
+   "price": 162.85000610351562,
+   "shares_outstanding": 24147000000.0,
+   "eps_ttm": 7.91,
+   "eps_ttm_period": "2025-07-26..2026-07-26",
+   "splits_applied": [
+    {
+     "date": "2000-06-27",
+     "ratio": 2.0
+    },
+    {
+     "date": "2001-09-10",
+     "ratio": 2.0
+    },
+    {
+     "date": "2006-04-07",
+     "ratio": 2.0
+    },
+    {
+     "date": "2007-09-11",
+     "ratio": 1.5
+    },
+    {
+     "date": "2021-07-20",
+     "ratio": 4.0
+    },
+    {
+     "date": "2024-06-10",
+     "ratio": 10.0
+    }
+   ]
+  },
+  "events": [
+   {
+    "timestamp": "2026-11-14T10:33:14.731665",
+    "agent": "system",
+    "message": "Investment mandate created for NVDA. Analysis session sess_1175377a70284e18 started.",
+    "round": null
+   },
+   {
+    "timestamp": "2026-11-14T10:33:14.742082",
+    "agent": "system",
+    "message": "Fetching market snapshot, SEC financials, news and catalysts for NVDA...",
+    "round": null
+   },
+   {
+    "timestamp": "2026-11-14T10:33:19.788668",
+    "agent": "system",
+    "message": "Market snapshot: NVDA 162.85 at 2026-11-14T05:03:14Z (last close 2026-11-13); TTM EPS 7.91 (2025-07-26..2026-07-26)",
+    "round": null
+   },
+   {
+    "timestamp": "2026-11-14T10:33:19.922312",
+    "agent": "system",
+    "message": "Quant report built: 16 of 22 fields available (seed 42)",
+    "round": null
+   },
+   {
+    "timestamp": "2026-11-14T10:33:22.694902",
+    "agent": "charlie",
+    "message": "Stance: bullish (confidence 85)\nClaims:\n- [C1] Revenue grew 125.8% YoY FY2024 vs FY2023 (sec:revenue:FY2024, sec:revenue:FY2023)\n- [C2] Operating margin was 54.1% in FY2024 (sec:operating_income:FY2024, sec:revenue:FY2024)\n- [C3] Debt-to-equity ratio was 0.23 in FY2024 (sec:long_term_debt:FY2024, sec:equity:FY2024)\n- [C4] Strong revenue growth, high operating margin and low leverage support a bullish fundamental outlook (C1, C2, C3)\nRisks:\n- Potential slowdown in AI demand could curb revenue growth\n- Higher R&D spending may pressure cash flow\n- Macroeconomic tightening could increase financing costs",
+    "round": 1
+   },
+   {
+    "timestamp": "2026-11-14T10:33:26.231126",
+    "agent": "delta",
+    "message": "Stance: bearish (confidence 85)\nClaims:\n- [C1] Nvidia CEO Jensen Huang resigned unexpectedly, raising fresh questions over hardware roadmap and financing support. (news:3)\n- [C2] Nvidia stock is down over 30 percent from highs with the CEO stepping down. (news:5)\n- [C3] The price drawdown from the 52-week high is approximately -0.319. (mkt:drawdown_from_52w_high)\n- [C4] The price return over 1 month is -0.250. (mkt:return_1m)\n- [C5] Recent news coverage is overwhelmingly negative due to the CEO resignation and subsequent sharp market pullback. (C1, C2, C3, C4)\nRisks:\n- Unexpected CEO resignation creates severe leadership and strategic uncertainty.\n- Supplier concentration and financing support risks for major partners.\n- Potential regulatory or governance fallout regarding past executive conduct.\n- Sharp double-digit negative price momentum over multiple horizons.",
+    "round": 1
+   },
+   {
+    "timestamp": "2026-11-14T10:33:28.800059",
+    "agent": "gamma",
+    "message": "Stance: bullish (confidence 70)\nClaims:\n- [C1] Price/earnings ratio is 20.59x (calc:pe)\n- [C2] PEG ratio is 0.23x (calc:peg)\n- [C3] Net debt is negative $2.14B, indicating net cash (calc:net_debt)\n- [C4] Current price is 31.9% below its 52\u2011week high (mkt:drawdown_from_52w_high)\n- [C5] Valuation appears undervalued given low PE and PEG and strong balance sheet despite price weakness (C1, C2, C3, C4)\nRisks:\n- High beta (1.89) amplifies market moves\n- Negative Sharpe ratio (\u20110.21) indicates poor risk\u2011adjusted return\n- Recent price declines across 1\u2011month to 1\u2011year windows\n- Operating cash flow volatility may affect future cash generation",
+    "round": 1
+   },
+   {
+    "timestamp": "2026-11-14T10:33:36.884368",
+    "agent": "vega",
+    "message": "Stance: neutral (confidence 65)\nClaims:\n- [C1] Analyst mean price target implies significant upside relative to current price (cat:target_mean_upside)\n- [C2] Analyst sentiment has weakened with 10 downgrades in the last 30 days (cat:downgrades_30d)\n- [C3] Analysts cut price targets 19 times in the last 30 days (cat:target_cuts_30d)\n- [C4] Options market implies high at-the-money volatility ahead of earnings in 5 days (cat:implied_vol_atm)\n- [C5] Options market implies earnings move of about 8.6 percent (cat:implied_move)\n- [C6] High mean target upside contrasts with recent negative rating and target revisions, keeping near-term direction balanced. (C1, C2, C3)\n- [C7] Upcoming earnings report in 5 days is the main near-term catalyst with significant implied stock move. (C4, C5)\nRisks:\n- Recent 10 downgrades signals deteriorating analyst sentiment.\n- 19 price target cuts indicate lowering near-term analyst expectations.\n- High options implied volatility reflects elevated earnings event risk.",
+    "round": 1
+   },
+   {
+    "timestamp": "2026-11-14T10:34:32.289842",
+    "agent": "charlie",
+    "message": "Round 2 critiques by charlie:\n- [K1] QUALIFY delta.C1: No SEC filing evidence on CEO resignation; claim cannot be verified from provided data (sec:revenue:FY2026)\n- [K2] QUALIFY delta.C3: Drawdown figure requires market price data not present in SEC evidence (sec:operating_cash_flow:FY2026)\n- [K3] SUPPORT gamma.C3: Cash 10.605B minus long-term debt 8.468B yields net cash of ~2.14B, matching claim (sec:cash:FY2026, sec:long_term_debt:FY2026)\n- [K4] QUALIFY vega.C1: Analyst target upside is not disclosed in SEC filings; cannot confirm (sec:net_income:FY2026)",
+    "round": 2
+   },
+   {
+    "timestamp": "2026-11-14T10:34:34.233040",
+    "agent": "delta",
+    "message": "Round 2 critiques by delta:\n- [K1] QUALIFY charlie.C4: Fundamental strength ignores recent governance shocks and sudden leadership resignation risks reported in the news. (news:3)\n- [K2] QUALIFY gamma.C5: Valuation may look attractive, but negative news coverage and CEO exit create significant near-term downside pressure. (news:5)\n- [K3] SUPPORT vega.C6: High analyst target upside contrasts directly with recent downgrades and extreme negative sentiment in news coverage. (news:10)",
+    "round": 2
+   },
+   {
+    "timestamp": "2026-11-14T10:35:31.167733",
+    "agent": "gamma",
+    "message": "Round 2 critiques by gamma:\n- [K1] DISPUTE charlie.C1: Revenue growth claim lacks supporting data in provided evidence set (calc:eps_cagr)\n- [K2] DISPUTE delta.C1: No news evidence provided to confirm CEO resignation claim (sec:cash:FY2024)\n- [K3] DISPUTE vega.C1: Analyst target upside claim not backed by any cited evidence (quant:market.beta)",
+    "round": 2
+   },
+   {
+    "timestamp": "2026-11-14T10:36:55.433279",
+    "agent": "vega",
+    "message": "Round 2 critiques by vega:\n- [K1] QUALIFY charlie.C4: Historical fundamentals ignore near-term catalyst risk with earnings in 5 days and 19 target cuts. (cat:days_to_earnings, cat:target_cuts_30d)\n- [K2] SUPPORT delta.C4: Confirms 1-month return of -0.250334 ratio, matching 10 analyst downgrades in last 30 days. (mkt:return_1m, cat:downgrades_30d)\n- [K3] QUALIFY gamma.C5: Valuation thesis ignores near-term earnings in 5 days and high options implied volatility of 0.92505 ratio. (cat:days_to_earnings, cat:implied_vol_atm)",
+    "round": 2
+   },
+   {
+    "timestamp": "2026-11-14T10:36:57.793504",
+    "agent": "charlie",
+    "message": "Final stance: bullish (confidence 85); unchanged from round 1\nClaims:\n- [C1] Revenue grew 125.8% YoY FY2024 vs FY2023 (sec:revenue:FY2024, sec:revenue:FY2023)\n- [C2] Operating margin was 54.1% in FY2024 (sec:operating_income:FY2024, sec:revenue:FY2024)\n- [C3] Debt-to-equity ratio was 0.23 in FY2024 (sec:long_term_debt:FY2024, sec:equity:FY2024)\n- [C4] Strong revenue growth, high operating margin and low leverage support a bullish fundamental outlook (C1, C2, C3)\nRisks:\n- Potential slowdown in AI demand could curb revenue growth\n- Higher R&D spending may pressure cash flow\n- Macroeconomic tightening could increase financing costs\nOwn claims after critique:\n- C1 kept: Revenue data present; critique misstates lack of evidence (re gamma.K1)\n- C2 kept: Operating margin calculation verified; critique not directed at this claim\n- C3 kept: Debt/equity ratio calculation verified; critique not directed at this claim\n- C4 kept: Inference based on kept numeric claims; qualifiers do not overturn (re delta.K1, vega.K1)",
+    "round": 3
+   },
+   {
+    "timestamp": "2026-11-14T10:37:04.349687",
+    "agent": "delta",
+    "message": "Final stance: bearish (confidence 80); unchanged from round 1\nClaims:\n- [C1] Nvidia CEO Jensen Huang resigned unexpectedly, raising fresh questions over hardware roadmap and financing support. (news:3)\n- [C2] Nvidia stock is down over 30 percent from highs with the CEO stepping down. (news:5)\n- [C3] The price drawdown from the 52-week high is approximately -0.319. (mkt:drawdown_from_52w_high)\n- [C4] The price return over 1 month is -0.250. (mkt:return_1m)\n- [C5] Recent news coverage is overwhelmingly negative due to the CEO resignation and subsequent sharp market pullback. (C1, C2, C3, C4)\nRisks:\n- Unexpected CEO resignation creates severe leadership and strategic uncertainty.\n- Supplier concentration and financing support risks for major partners.\n- Potential regulatory or governance fallout regarding past executive conduct.\n- Sharp double-digit negative price momentum over multiple horizons.\nChanged my view:\n- vega.K2: Supports one-month return metrics matching negative sentiment trends.\nOwn claims after critique:\n- C1 kept: News evidence confirms the CEO resignation event. (re charlie.K1, gamma.K2)\n- C3 kept: Market drawdown figure is verified directly from market data. (re charlie.K2, vega.K2)",
+    "round": 3
+   },
+   {
+    "timestamp": "2026-11-14T10:37:04.355776",
+    "agent": "system",
+    "message": "ERROR (Gamma): token budget: this agent's token share is used up (~0 tokens of room, 1166 needed)",
+    "round": 3
+   },
+   {
+    "timestamp": "2026-11-14T10:37:04.355783",
+    "agent": "system",
+    "message": "Error: Gamma failed - token budget: this agent's token share is used up (~0 tokens of room, 1166 needed)",
+    "round": 3
+   },
+   {
+    "timestamp": "2026-11-14T10:37:21.849273",
+    "agent": "vega",
+    "message": "Final stance: neutral (confidence 65); unchanged from round 1\nClaims:\n- [C1] Analyst mean price target implies significant upside relative to current price (cat:target_mean_upside)\n- [C2] Analyst sentiment has weakened with 10 downgrades in the last 30 days (cat:downgrades_30d)\n- [C3] Analysts cut price targets 19 times in the last 30 days (cat:target_cuts_30d)\n- [C4] Options market implies high at-the-money volatility ahead of earnings in 5 days (cat:implied_vol_atm)\n- [C5] Options market implies earnings move of about 8.6 percent (cat:implied_move)\n- [C6] High mean target upside contrasts with recent negative rating and target revisions, keeping near-term direction balanced. (C1, C2, C3)\n- [C7] Upcoming earnings report in 5 days is the main near-term catalyst with significant implied stock move. (C4, C5)\nRisks:\n- Recent 10 downgrades signals deteriorating analyst sentiment.\n- 19 price target cuts indicate lowering near-term analyst expectations.\n- High options implied volatility reflects elevated earnings event risk.\nOwn claims after critique:\n- C1 kept: Data in cat:target_mean_upside is verified and accurate in provided evidence context. (re charlie.K4, gamma.K3)\n- C6 kept: Disagree with critique; target upside and downgrades both come from valid catalyst dataset. (re delta.K3)",
+    "round": 3
+   }
+  ],
+  "quant_report": {
+   "as_of": "2026-11-14",
+   "seed": 42,
+   "drift_mode": "zero",
+   "horizon_days": 63,
+   "input_dates": {
+    "closes": [
+     "2016-11-14",
+     "2026-11-13"
+    ],
+    "benchmark": [
+     "2024-11-14",
+     "2026-11-13"
+    ],
+    "eps_history": [
+     "2010-03-18",
+     "2026-02-25"
+    ]
+   },
+   "fields": {
+    "quant:returns.vol_annual": {
+     "id": "quant:returns.vol_annual",
+     "label": "Annualised volatility of daily returns",
+     "status": "ok",
+     "value": 0.3874961887851557,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 252,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "sample sd of daily simple returns x sqrt(252)",
+     "reason": null
+    },
+    "quant:returns.skew": {
+     "id": "quant:returns.skew",
+     "label": "Skewness of daily returns",
+     "status": "ok",
+     "value": -0.019219444681802676,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 252,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "adjusted sample skewness",
+     "reason": null
+    },
+    "quant:returns.excess_kurtosis": {
+     "id": "quant:returns.excess_kurtosis",
+     "label": "Excess kurtosis of daily returns",
+     "status": "ok",
+     "value": 1.0392118715937855,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 252,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "adjusted sample excess kurtosis (normal = 0)",
+     "reason": null
+    },
+    "quant:returns.max_drawdown": {
+     "id": "quant:returns.max_drawdown",
+     "label": "Maximum drawdown",
+     "status": "ok",
+     "value": -0.31930278229253417,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 252,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "min of price / running peak - 1",
+     "reason": null
+    },
+    "quant:returns.var95_hist": {
+     "id": "quant:returns.var95_hist",
+     "label": "1-day 95% Value at Risk (historical)",
+     "status": "ok",
+     "value": 0.04190298598719445,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 252,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "-(5th percentile of daily returns)",
+     "reason": null
+    },
+    "quant:returns.var95_normal": {
+     "id": "quant:returns.var95_normal",
+     "label": "1-day 95% Value at Risk (normal)",
+     "status": "ok",
+     "value": 0.040534302061819905,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 252,
+     "n_kind": "observations",
+     "kind": "model",
+     "method": "-(mean + z_0.05 x sd), assumes normally distributed returns",
+     "reason": null
+    },
+    "quant:market.beta": {
+     "id": "quant:market.beta",
+     "label": "Beta vs S&P 500",
+     "status": "ok",
+     "value": 1.8909980673314009,
+     "unit": "x",
+     "interval": null,
+     "interval_level": null,
+     "n": 500,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "OLS slope of daily stock returns on S&P 500 returns",
+     "reason": null
+    },
+    "quant:market.beta_se": {
+     "id": "quant:market.beta_se",
+     "label": "Standard error of beta",
+     "status": "ok",
+     "value": 0.08739036784832367,
+     "unit": "x",
+     "interval": null,
+     "interval_level": null,
+     "n": 500,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "classical OLS standard error of the slope",
+     "reason": null
+    },
+    "quant:market.correlation": {
+     "id": "quant:market.correlation",
+     "label": "Correlation with S&P 500",
+     "status": "ok",
+     "value": 0.6961266762097568,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 500,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "Pearson correlation of daily returns",
+     "reason": null
+    },
+    "quant:market.alpha_daily": {
+     "id": "quant:market.alpha_daily",
+     "label": "OLS intercept (daily)",
+     "status": "ok",
+     "value": -0.00039792463694094266,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 500,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "OLS intercept of daily returns",
+     "reason": null
+    },
+    "quant:capm.discount_rate": {
+     "id": "quant:capm.discount_rate",
+     "label": "CAPM discount rate",
+     "status": "ok",
+     "value": 0.14609,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 500,
+     "n_kind": "observations",
+     "kind": "model",
+     "method": "risk-free + clamp(beta, [0.5, 2.0]) x 5% ERP, clamped to [0.06, 0.15]",
+     "reason": null
+    },
+    "quant:mc_dcf.fair_value_p10": {
+     "id": "quant:mc_dcf.fair_value_p10",
+     "label": "DCF fair value per share, 10th percentile",
+     "status": "unavailable",
+     "value": null,
+     "unit": "USD",
+     "interval": null,
+     "interval_level": null,
+     "n": null,
+     "n_kind": "simulations",
+     "kind": "model",
+     "method": "10000 draws: FCF growth ~ Normal(hist. CAGR, hist. sd), discount ~ Normal(CAPM, 1%), terminal ~ Uniform(0.015, 0.03); 5y DCF less net debt",
+     "reason": "only 0 year(s) of free cash flow; at least 2 needed"
+    },
+    "quant:mc_dcf.fair_value_p50": {
+     "id": "quant:mc_dcf.fair_value_p50",
+     "label": "DCF fair value per share, median",
+     "status": "unavailable",
+     "value": null,
+     "unit": "USD",
+     "interval": null,
+     "interval_level": null,
+     "n": null,
+     "n_kind": "simulations",
+     "kind": "model",
+     "method": "10000 draws: FCF growth ~ Normal(hist. CAGR, hist. sd), discount ~ Normal(CAPM, 1%), terminal ~ Uniform(0.015, 0.03); 5y DCF less net debt",
+     "reason": "only 0 year(s) of free cash flow; at least 2 needed"
+    },
+    "quant:mc_dcf.fair_value_p90": {
+     "id": "quant:mc_dcf.fair_value_p90",
+     "label": "DCF fair value per share, 90th percentile",
+     "status": "unavailable",
+     "value": null,
+     "unit": "USD",
+     "interval": null,
+     "interval_level": null,
+     "n": null,
+     "n_kind": "simulations",
+     "kind": "model",
+     "method": "10000 draws: FCF growth ~ Normal(hist. CAGR, hist. sd), discount ~ Normal(CAPM, 1%), terminal ~ Uniform(0.015, 0.03); 5y DCF less net debt",
+     "reason": "only 0 year(s) of free cash flow; at least 2 needed"
+    },
+    "quant:mc_dcf.prob_fair_above_price": {
+     "id": "quant:mc_dcf.prob_fair_above_price",
+     "label": "Share of simulations with fair value above price",
+     "status": "unavailable",
+     "value": null,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": null,
+     "n_kind": "simulations",
+     "kind": "model",
+     "method": "10000 draws: FCF growth ~ Normal(hist. CAGR, hist. sd), discount ~ Normal(CAPM, 1%), terminal ~ Uniform(0.015, 0.03); 5y DCF less net debt",
+     "reason": "only 0 year(s) of free cash flow; at least 2 needed"
+    },
+    "quant:forward.prob_up_bootstrap": {
+     "id": "quant:forward.prob_up_bootstrap",
+     "label": "P(price above today in 63 trading days), bootstrap",
+     "status": "ok",
+     "value": 0.5415,
+     "unit": "ratio",
+     "interval": [
+      0.464975,
+      0.5365249999999999
+     ],
+     "interval_level": 0.9,
+     "n": 10000,
+     "n_kind": "simulations",
+     "kind": "prediction",
+     "method": "moving-block bootstrap, block 5, 10000 paths of 63 days, trend removed (log returns de-meaned); seed 43; interval: 200 resampled histories x 2000 paths",
+     "reason": null
+    },
+    "quant:forward.prob_up_normal": {
+     "id": "quant:forward.prob_up_normal",
+     "label": "P(price above today in 63 trading days), normal",
+     "status": "ok",
+     "value": 0.5,
+     "unit": "ratio",
+     "interval": [
+      0.5,
+      0.5
+     ],
+     "interval_level": 0.9,
+     "n": 252,
+     "n_kind": "observations",
+     "kind": "prediction",
+     "method": "i.i.d. normal log returns over 63 days, trend removed (log returns de-meaned); interval from mean +/- 1.645 sd/sqrt(n)",
+     "reason": null
+    },
+    "quant:forward.return_p5": {
+     "id": "quant:forward.return_p5",
+     "label": "63-day return, 5th percentile (bootstrap)",
+     "status": "ok",
+     "value": -0.2533355483635753,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 10000,
+     "n_kind": "simulations",
+     "kind": "prediction",
+     "method": "moving-block bootstrap, block 5, 10000 paths of 63 days, trend removed (log returns de-meaned); seed 43",
+     "reason": null
+    },
+    "quant:forward.return_p50": {
+     "id": "quant:forward.return_p50",
+     "label": "63-day return, median (bootstrap)",
+     "status": "ok",
+     "value": 0.0198330461241674,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 10000,
+     "n_kind": "simulations",
+     "kind": "prediction",
+     "method": "moving-block bootstrap, block 5, 10000 paths of 63 days, trend removed (log returns de-meaned); seed 43",
+     "reason": null
+    },
+    "quant:forward.return_p95": {
+     "id": "quant:forward.return_p95",
+     "label": "63-day return, 95th percentile (bootstrap)",
+     "status": "ok",
+     "value": 0.37943230958702656,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 10000,
+     "n_kind": "simulations",
+     "kind": "prediction",
+     "method": "moving-block bootstrap, block 5, 10000 paths of 63 days, trend removed (log returns de-meaned); seed 43",
+     "reason": null
+    },
+    "quant:base_rate.share_up": {
+     "id": "quant:base_rate.share_up",
+     "label": "Share of similar past cases that rose over 63 trading days",
+     "status": "unavailable",
+     "value": null,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 1,
+     "n_kind": "cases",
+     "kind": "descriptive",
+     "method": "own history, non-overlapping 63-day windows; similar = momentum within +/-10% points and trailing PE within +/-25%; Wilson 95% interval",
+     "reason": "insufficient data: 1 similar cases out of 37; at least 30 needed"
+    },
+    "quant:calibration.brier": {
+     "id": "quant:calibration.brier",
+     "label": "Brier score of past forward.prob_up_bootstrap forecasts",
+     "status": "unavailable",
+     "value": null,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 0,
+     "n_kind": "pairs",
+     "kind": "descriptive",
+     "method": "mean squared difference between stated probability and outcome (0 best, 0.25 = coin flip)",
+     "reason": "only 0 recorded forecast/outcome pairs; at least 20 needed"
+    }
+   },
+   "reliability": null,
+   "notes": [
+    "base rates: 37 non-overlapping 63-day cases from 2514 closes; EPS split-adjusted for splits after each filing"
+   ]
+  }
+ },
+ "sigma": {
+  "debate_id": "NVDA_balanced_20261114_103314_8d244e",
+  "ticker": "NVDA",
+  "persona": "balanced",
+  "evaluation": {
+   "faithfulness_score": 100.0,
+   "integrity_score": 75.0,
+   "overall_quality": 87.5
+  },
+  "final_recommendation": {
+   "recommendation": "Hold",
+   "confidence": 9.64,
+   "score": 0.305,
+   "supporting_points": [
+    "vega C1: Analyst mean price target implies significant upside relative to current price",
+    "vega C2: Analyst sentiment has weakened with 10 downgrades in the last 30 days",
+    "vega C3: Analysts cut price targets 19 times in the last 30 days",
+    "vega C4: Options market implies high at-the-money volatility ahead of earnings in 5 days",
+    "vega C5: Options market implies earnings move of about 8.6 percent"
+   ],
+   "key_risks": [
+    "charlie: Potential slowdown in AI demand could curb revenue growth",
+    "charlie: Higher R&D spending may pressure cash flow",
+    "charlie: Macroeconomic tightening could increase financing costs",
+    "delta: Unexpected CEO resignation creates severe leadership and strategic uncertainty.",
+    "delta: Supplier concentration and financing support risks for major partners."
+   ],
+   "gates": [
+    {
+     "name": "buy_score",
+     "value": 0.305,
+     "threshold": 0.35,
+     "passed": false,
+     "note": "S +0.30 < buy threshold +0.35"
+    },
+    {
+     "name": "margin_of_safety",
+     "value": null,
+     "threshold": 0.15,
+     "passed": false,
+     "note": "no DCF available: Buy requires a margin of safety"
+    },
+    {
+     "name": "volatility",
+     "value": 0.3874961887851557,
+     "threshold": 0.5,
+     "passed": true,
+     "note": "volatility 0.39 <= 0.50"
+    },
+    {
+     "name": "sell_score",
+     "value": 0.305,
+     "threshold": -0.3,
+     "passed": false,
+     "note": "S +0.30 > sell threshold -0.30"
+    }
+   ],
+   "agents_valid": [
+    "charlie",
+    "delta",
+    "gamma",
+    "vega"
+   ],
+   "agents_missing": [],
+   "warnings": [
+    "quant field unavailable - quant:mc_dcf.fair_value_p10: only 0 year(s) of free cash flow; at least 2 needed",
+    "quant field unavailable - quant:mc_dcf.fair_value_p50: only 0 year(s) of free cash flow; at least 2 needed",
+    "quant field unavailable - quant:mc_dcf.fair_value_p90: only 0 year(s) of free cash flow; at least 2 needed",
+    "quant field unavailable - quant:mc_dcf.prob_fair_above_price: only 0 year(s) of free cash flow; at least 2 needed",
+    "quant field unavailable - quant:base_rate.share_up: insufficient data: 1 similar cases out of 37; at least 30 needed",
+    "quant field unavailable - quant:calibration.brier: only 0 recorded forecast/outcome pairs; at least 20 needed",
+    "delta: news provider yfinance failed: *** YAHOO! FINANCE IS CURRENTLY DOWN! ***",
+    "delta: 1 of 15 articles have no summary (headline only)",
+    "gamma: DCF not computed: fewer than 2 years of FCF",
+    "gamma failed in round 3: token budget: this agent's token share is used up (~0 tokens of room, 1166 needed)"
+   ],
+   "reason": null,
+   "analysis": "The committee\u2019s verdict is Hold with a confidence of 10\u202f%. The debate score sits at +0.30, which fails the buy gate that requires at least +0.35 and also fails the buy gate that needs a DCF\u2011based margin of safety. The volatility gate passes (0.39\u202f\u2264\u202f0.50), but the score is above the sell threshold of \u20130.30, so the sell gate fails as well. Analysts\u2019 mean price target of $283.31 suggests roughly 74\u202f% upside, yet sentiment has weakened with ten downgrades and 19 price\u2011target cuts in the past month. Options show elevated at\u2011the\u2011money volatility ahead of earnings in five days and imply an earnings move of about 8.6\u202f%. Risks highlighted include a possible slowdown in AI demand, higher R&D spending hurting cash flow, tighter macro\u2011finance, a sudden CEO resignation and supplier\u2011concentration concerns. Investors should watch the upcoming earnings report, the evolution of analyst sentiment and price\u2011target revisions, and any change in the debate score toward the +0.35 buy trigger or a drop below \u20130.30 that would flip the recommendation.",
+   "confidence_before_quant": null,
+   "quant_agreement": null,
+   "contradiction_factor": null,
+   "quant_signals": {
+    "quant:forward.prob_up_bootstrap": 0.5415
+   },
+   "contradictions": [],
+   "hold_conviction": 0.128571,
+   "coverage": 1.0,
+   "suggestions": [
+    {
+     "kind": "action",
+     "title": "No action signal: hold or wait",
+     "detail": "Neither the Buy nor the Sell rule is met under Balanced thresholds (debate score +0.30). Confidence in Hold 10%: the debate is close to a Buy or Sell trigger, so watch the triggers below.",
+     "sources": []
+    },
+    {
+     "kind": "trigger",
+     "title": "Would become Buy if",
+     "detail": "debate score reaches +0.35 (now +0.30); and a DCF value can be computed (none was: Buy is not possible under these thresholds).",
+     "sources": []
+    },
+    {
+     "kind": "trigger",
+     "title": "Would become Sell if",
+     "detail": "the debate score falls to -0.30 or lower (now +0.30).",
+     "sources": []
+    },
+    {
+     "kind": "level",
+     "title": "Analyst consensus target",
+     "detail": "Mean target $283.31, +74.0% from the snapshot price.",
+     "sources": [
+      "cat:target_mean",
+      "cat:target_mean_upside"
+     ]
+    },
+    {
+     "kind": "event",
+     "title": "Earnings ahead",
+     "detail": "Next earnings report in 5 days. Options imply a move of about 8.6% either way by the first expiry after it; a decision made before the report carries that event risk.",
+     "sources": [
+      "cat:days_to_earnings",
+      "cat:implied_move"
+     ]
+    },
+    {
+     "kind": "event",
+     "title": "Estimate revisions lean upward",
+     "detail": "2 upward and 0 downward EPS revisions for this fiscal year in the last 30 days.",
+     "sources": [
+      "cat:eps_revisions_up_30d",
+      "cat:eps_revisions_down_30d"
+     ]
+    },
+    {
+     "kind": "risk",
+     "title": "Size for the swings",
+     "detail": "Over the past year, 1 trading day in 20 lost 4.19% or more, the worst peak-to-trough fall was 31.9%, and annualised volatility was 39%. Past swings, not a forecast.",
+     "sources": [
+      "quant:returns.var95_hist",
+      "quant:returns.max_drawdown",
+      "quant:returns.vol_annual"
+     ]
+    },
+    {
+     "kind": "context",
+     "title": "Other risk settings disagree",
+     "detail": "Same debate, different thresholds: Alpha gives Buy.",
+     "sources": []
+    }
+   ]
+  },
+  "integrity": {
+   "charlie": {
+    "agent": "charlie",
+    "received": 3,
+    "answered": 3,
+    "failed_round1_claims": 0,
+    "retained_failed": 0,
+    "unexplained_stance_change": false,
+    "integrity": 1.0
+   },
+   "delta": {
+    "agent": "delta",
+    "received": 4,
+    "answered": 4,
+    "failed_round1_claims": 0,
+    "retained_failed": 0,
+    "unexplained_stance_change": false,
+    "integrity": 1.0
+   },
+   "gamma": {
+    "agent": "gamma",
+    "received": 3,
+    "answered": 0,
+    "failed_round1_claims": 0,
+    "retained_failed": 0,
+    "unexplained_stance_change": false,
+    "integrity": 0.0
+   },
+   "vega": {
+    "agent": "vega",
+    "received": 3,
+    "answered": 3,
+    "failed_round1_claims": 0,
+    "retained_failed": 0,
+    "unexplained_stance_change": false,
+    "integrity": 1.0
+   }
+  },
+  "verdicts_by_persona": {
+   "zen": {
+    "recommendation": "Hold",
+    "confidence": 29.25,
+    "hold_conviction": 0.39,
+    "coverage": 1.0,
+    "score": 0.305,
+    "agent_scores": {
+     "charlie": 0.85,
+     "delta": -0.8,
+     "gamma": 0.7,
+     "vega": 0.0
+    },
+    "gates": [
+     {
+      "name": "buy_score",
+      "value": 0.305,
+      "threshold": 0.5,
+      "passed": false,
+      "note": "S +0.30 < buy threshold +0.50"
+     },
+     {
+      "name": "margin_of_safety",
+      "value": null,
+      "threshold": 0.25,
+      "passed": false,
+      "note": "no DCF available: Buy requires a margin of safety"
+     },
+     {
+      "name": "volatility",
+      "value": 0.3874961887851557,
+      "threshold": 0.35,
+      "passed": false,
+      "note": "volatility 0.39 > 0.35"
+     },
+     {
+      "name": "sell_score",
+      "value": 0.305,
+      "threshold": -0.2,
+      "passed": false,
+      "note": "S +0.30 > sell threshold -0.20"
+     }
+    ],
+    "agents_valid": [
+     "charlie",
+     "delta",
+     "gamma",
+     "vega"
+    ],
+    "agents_missing": [],
+    "warnings": [
+     "quant field unavailable - quant:mc_dcf.fair_value_p10: only 0 year(s) of free cash flow; at least 2 needed",
+     "quant field unavailable - quant:mc_dcf.fair_value_p50: only 0 year(s) of free cash flow; at least 2 needed",
+     "quant field unavailable - quant:mc_dcf.fair_value_p90: only 0 year(s) of free cash flow; at least 2 needed",
+     "quant field unavailable - quant:mc_dcf.prob_fair_above_price: only 0 year(s) of free cash flow; at least 2 needed",
+     "quant field unavailable - quant:base_rate.share_up: insufficient data: 1 similar cases out of 37; at least 30 needed",
+     "quant field unavailable - quant:calibration.brier: only 0 recorded forecast/outcome pairs; at least 20 needed",
+     "delta: news provider yfinance failed: *** YAHOO! FINANCE IS CURRENTLY DOWN! ***",
+     "delta: 1 of 15 articles have no summary (headline only)",
+     "gamma: DCF not computed: fewer than 2 years of FCF",
+     "gamma failed in round 3: token budget: this agent's token share is used up (~0 tokens of room, 1166 needed)"
+    ],
+    "reason": null,
+    "confidence_before_quant": null,
+    "quant_agreement": null,
+    "contradiction_factor": null,
+    "quant_signals": {
+     "quant:forward.prob_up_bootstrap": 0.5415
+    },
+    "contradictions": []
+   },
+   "balanced": {
+    "recommendation": "Hold",
+    "confidence": 9.64,
+    "hold_conviction": 0.128571,
+    "coverage": 1.0,
+    "score": 0.305,
+    "agent_scores": {
+     "charlie": 0.85,
+     "delta": -0.8,
+     "gamma": 0.7,
+     "vega": 0.0
+    },
+    "gates": [
+     {
+      "name": "buy_score",
+      "value": 0.305,
+      "threshold": 0.35,
+      "passed": false,
+      "note": "S +0.30 < buy threshold +0.35"
+     },
+     {
+      "name": "margin_of_safety",
+      "value": null,
+      "threshold": 0.15,
+      "passed": false,
+      "note": "no DCF available: Buy requires a margin of safety"
+     },
+     {
+      "name": "volatility",
+      "value": 0.3874961887851557,
+      "threshold": 0.5,
+      "passed": true,
+      "note": "volatility 0.39 <= 0.50"
+     },
+     {
+      "name": "sell_score",
+      "value": 0.305,
+      "threshold": -0.3,
+      "passed": false,
+      "note": "S +0.30 > sell threshold -0.30"
+     }
+    ],
+    "agents_valid": [
+     "charlie",
+     "delta",
+     "gamma",
+     "vega"
+    ],
+    "agents_missing": [],
+    "warnings": [
+     "quant field unavailable - quant:mc_dcf.fair_value_p10: only 0 year(s) of free cash flow; at least 2 needed",
+     "quant field unavailable - quant:mc_dcf.fair_value_p50: only 0 year(s) of free cash flow; at least 2 needed",
+     "quant field unavailable - quant:mc_dcf.fair_value_p90: only 0 year(s) of free cash flow; at least 2 needed",
+     "quant field unavailable - quant:mc_dcf.prob_fair_above_price: only 0 year(s) of free cash flow; at least 2 needed",
+     "quant field unavailable - quant:base_rate.share_up: insufficient data: 1 similar cases out of 37; at least 30 needed",
+     "quant field unavailable - quant:calibration.brier: only 0 recorded forecast/outcome pairs; at least 20 needed",
+     "delta: news provider yfinance failed: *** YAHOO! FINANCE IS CURRENTLY DOWN! ***",
+     "delta: 1 of 15 articles have no summary (headline only)",
+     "gamma: DCF not computed: fewer than 2 years of FCF",
+     "gamma failed in round 3: token budget: this agent's token share is used up (~0 tokens of room, 1166 needed)"
+    ],
+    "reason": null,
+    "confidence_before_quant": null,
+    "quant_agreement": null,
+    "contradiction_factor": null,
+    "quant_signals": {
+     "quant:forward.prob_up_bootstrap": 0.5415
+    },
+    "contradictions": []
+   },
+   "alpha": {
+    "recommendation": "Buy",
+    "confidence": 22.88,
+    "hold_conviction": null,
+    "coverage": 1.0,
+    "score": 0.305,
+    "agent_scores": {
+     "charlie": 0.85,
+     "delta": -0.8,
+     "gamma": 0.7,
+     "vega": 0.0
+    },
+    "gates": [
+     {
+      "name": "buy_score",
+      "value": 0.305,
+      "threshold": 0.25,
+      "passed": true,
+      "note": "S +0.30 >= buy threshold +0.25"
+     },
+     {
+      "name": "margin_of_safety",
+      "value": null,
+      "threshold": 0.0,
+      "passed": true,
+      "note": "skipped: no DCF available"
+     },
+     {
+      "name": "volatility",
+      "value": 0.3874961887851557,
+      "threshold": null,
+      "passed": true,
+      "note": "no volatility limit for this persona"
+     },
+     {
+      "name": "sell_score",
+      "value": 0.305,
+      "threshold": -0.4,
+      "passed": false,
+      "note": "S +0.30 > sell threshold -0.40"
+     }
+    ],
+    "agents_valid": [
+     "charlie",
+     "delta",
+     "gamma",
+     "vega"
+    ],
+    "agents_missing": [],
+    "warnings": [
+     "quant field unavailable - quant:mc_dcf.fair_value_p10: only 0 year(s) of free cash flow; at least 2 needed",
+     "quant field unavailable - quant:mc_dcf.fair_value_p50: only 0 year(s) of free cash flow; at least 2 needed",
+     "quant field unavailable - quant:mc_dcf.fair_value_p90: only 0 year(s) of free cash flow; at least 2 needed",
+     "quant field unavailable - quant:mc_dcf.prob_fair_above_price: only 0 year(s) of free cash flow; at least 2 needed",
+     "quant field unavailable - quant:base_rate.share_up: insufficient data: 1 similar cases out of 37; at least 30 needed",
+     "quant field unavailable - quant:calibration.brier: only 0 recorded forecast/outcome pairs; at least 20 needed",
+     "delta: news provider yfinance failed: *** YAHOO! FINANCE IS CURRENTLY DOWN! ***",
+     "delta: 1 of 15 articles have no summary (headline only)",
+     "gamma: DCF not computed: fewer than 2 years of FCF",
+     "gamma failed in round 3: token budget: this agent's token share is used up (~0 tokens of room, 1166 needed)",
+     "no DCF available: Buy allowed without a margin-of-safety check"
+    ],
+    "reason": null,
+    "confidence_before_quant": 22.88,
+    "quant_agreement": 1.0,
+    "contradiction_factor": 1.0,
+    "quant_signals": {
+     "quant:forward.prob_up_bootstrap": 0.5415
+    },
+    "contradictions": []
+   }
+  },
+  "metadata": {
+   "rounds_evaluated": 3,
+   "agents_evaluated": [
+    "charlie",
+    "delta",
+    "gamma",
+    "vega"
+   ],
+   "outcome": {
+    "status": "COMPLETED",
+    "reason": null,
+    "detail": null,
+    "warnings": [
+     "quant field unavailable - quant:mc_dcf.fair_value_p10: only 0 year(s) of free cash flow; at least 2 needed",
+     "quant field unavailable - quant:mc_dcf.fair_value_p50: only 0 year(s) of free cash flow; at least 2 needed",
+     "quant field unavailable - quant:mc_dcf.fair_value_p90: only 0 year(s) of free cash flow; at least 2 needed",
+     "quant field unavailable - quant:mc_dcf.prob_fair_above_price: only 0 year(s) of free cash flow; at least 2 needed",
+     "quant field unavailable - quant:base_rate.share_up: insufficient data: 1 similar cases out of 37; at least 30 needed",
+     "quant field unavailable - quant:calibration.brier: only 0 recorded forecast/outcome pairs; at least 20 needed",
+     "delta: news provider yfinance failed: *** YAHOO! FINANCE IS CURRENTLY DOWN! ***",
+     "delta: 1 of 15 articles have no summary (headline only)",
+     "gamma: DCF not computed: fewer than 2 years of FCF",
+     "gamma failed in round 3: token budget: this agent's token share is used up (~0 tokens of room, 1166 needed)"
+    ]
+   }
+  }
+ },
+ "alpha_packet": {
+  "packet_id": "packet_d74dd723b44173d0",
+  "mandate_id": "mandate_a5721f00afb903e9",
+  "ticker": "NVDA",
+  "persona": "balanced",
+  "recommendation": "Hold",
+  "confidence": 9.64,
+  "quality_scores": {
+   "faithfulness": 100.0,
+   "integrity": 75.0,
+   "overall": 87.5
+  },
+  "debate_summary": {
+   "rounds": 3,
+   "agents": [
+    "charlie",
+    "delta",
+    "gamma",
+    "vega"
+   ],
+   "quality": 87.5
+  },
+  "key_risks": [
+   "charlie: Potential slowdown in AI demand could curb revenue growth",
+   "charlie: Higher R&D spending may pressure cash flow",
+   "charlie: Macroeconomic tightening could increase financing costs",
+   "delta: Unexpected CEO resignation creates severe leadership and strategic uncertainty.",
+   "delta: Supplier concentration and financing support risks for major partners."
+  ],
+  "verdict_detail": {
+   "score": 0.305,
+   "gates": [
+    {
+     "name": "buy_score",
+     "value": 0.305,
+     "threshold": 0.35,
+     "passed": false,
+     "note": "S +0.30 < buy threshold +0.35"
+    },
+    {
+     "name": "margin_of_safety",
+     "value": null,
+     "threshold": 0.15,
+     "passed": false,
+     "note": "no DCF available: Buy requires a margin of safety"
+    },
+    {
+     "name": "volatility",
+     "value": 0.3874961887851557,
+     "threshold": 0.5,
+     "passed": true,
+     "note": "volatility 0.39 <= 0.50"
+    },
+    {
+     "name": "sell_score",
+     "value": 0.305,
+     "threshold": -0.3,
+     "passed": false,
+     "note": "S +0.30 > sell threshold -0.30"
+    }
+   ],
+   "supporting_points": [
+    "vega C1: Analyst mean price target implies significant upside relative to current price",
+    "vega C2: Analyst sentiment has weakened with 10 downgrades in the last 30 days",
+    "vega C3: Analysts cut price targets 19 times in the last 30 days",
+    "vega C4: Options market implies high at-the-money volatility ahead of earnings in 5 days",
+    "vega C5: Options market implies earnings move of about 8.6 percent"
+   ],
+   "agents_valid": [
+    "charlie",
+    "delta",
+    "gamma",
+    "vega"
+   ],
+   "agents_missing": [],
+   "warnings": [
+    "quant field unavailable - quant:mc_dcf.fair_value_p10: only 0 year(s) of free cash flow; at least 2 needed",
+    "quant field unavailable - quant:mc_dcf.fair_value_p50: only 0 year(s) of free cash flow; at least 2 needed",
+    "quant field unavailable - quant:mc_dcf.fair_value_p90: only 0 year(s) of free cash flow; at least 2 needed",
+    "quant field unavailable - quant:mc_dcf.prob_fair_above_price: only 0 year(s) of free cash flow; at least 2 needed",
+    "quant field unavailable - quant:base_rate.share_up: insufficient data: 1 similar cases out of 37; at least 30 needed",
+    "quant field unavailable - quant:calibration.brier: only 0 recorded forecast/outcome pairs; at least 20 needed",
+    "delta: news provider yfinance failed: *** YAHOO! FINANCE IS CURRENTLY DOWN! ***",
+    "delta: 1 of 15 articles have no summary (headline only)",
+    "gamma: DCF not computed: fewer than 2 years of FCF",
+    "gamma failed in round 3: token budget: this agent's token share is used up (~0 tokens of room, 1166 needed)"
+   ],
+   "reason": null,
+   "confidence_before_quant": null,
+   "quant_agreement": null,
+   "contradiction_factor": null,
+   "contradictions": [],
+   "hold_conviction": 0.128571,
+   "coverage": 1.0,
+   "suggestions": [
+    {
+     "kind": "action",
+     "title": "No action signal: hold or wait",
+     "detail": "Neither the Buy nor the Sell rule is met under Balanced thresholds (debate score +0.30). Confidence in Hold 10%: the debate is close to a Buy or Sell trigger, so watch the triggers below.",
+     "sources": []
+    },
+    {
+     "kind": "trigger",
+     "title": "Would become Buy if",
+     "detail": "debate score reaches +0.35 (now +0.30); and a DCF value can be computed (none was: Buy is not possible under these thresholds).",
+     "sources": []
+    },
+    {
+     "kind": "trigger",
+     "title": "Would become Sell if",
+     "detail": "the debate score falls to -0.30 or lower (now +0.30).",
+     "sources": []
+    },
+    {
+     "kind": "level",
+     "title": "Analyst consensus target",
+     "detail": "Mean target $283.31, +74.0% from the snapshot price.",
+     "sources": [
+      "cat:target_mean",
+      "cat:target_mean_upside"
+     ]
+    },
+    {
+     "kind": "event",
+     "title": "Earnings ahead",
+     "detail": "Next earnings report in 5 days. Options imply a move of about 8.6% either way by the first expiry after it; a decision made before the report carries that event risk.",
+     "sources": [
+      "cat:days_to_earnings",
+      "cat:implied_move"
+     ]
+    },
+    {
+     "kind": "event",
+     "title": "Estimate revisions lean upward",
+     "detail": "2 upward and 0 downward EPS revisions for this fiscal year in the last 30 days.",
+     "sources": [
+      "cat:eps_revisions_up_30d",
+      "cat:eps_revisions_down_30d"
+     ]
+    },
+    {
+     "kind": "risk",
+     "title": "Size for the swings",
+     "detail": "Over the past year, 1 trading day in 20 lost 4.19% or more, the worst peak-to-trough fall was 31.9%, and annualised volatility was 39%. Past swings, not a forecast.",
+     "sources": [
+      "quant:returns.var95_hist",
+      "quant:returns.max_drawdown",
+      "quant:returns.vol_annual"
+     ]
+    },
+    {
+     "kind": "context",
+     "title": "Other risk settings disagree",
+     "detail": "Same debate, different thresholds: Alpha gives Buy.",
+     "sources": []
+    }
+   ]
+  },
+  "quant_report": {
+   "as_of": "2026-11-14",
+   "seed": 42,
+   "drift_mode": "zero",
+   "horizon_days": 63,
+   "input_dates": {
+    "closes": [
+     "2016-11-14",
+     "2026-11-13"
+    ],
+    "benchmark": [
+     "2024-11-14",
+     "2026-11-13"
+    ],
+    "eps_history": [
+     "2010-03-18",
+     "2026-02-25"
+    ]
+   },
+   "fields": {
+    "quant:returns.vol_annual": {
+     "id": "quant:returns.vol_annual",
+     "label": "Annualised volatility of daily returns",
+     "status": "ok",
+     "value": 0.3874961887851557,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 252,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "sample sd of daily simple returns x sqrt(252)",
+     "reason": null
+    },
+    "quant:returns.skew": {
+     "id": "quant:returns.skew",
+     "label": "Skewness of daily returns",
+     "status": "ok",
+     "value": -0.019219444681802676,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 252,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "adjusted sample skewness",
+     "reason": null
+    },
+    "quant:returns.excess_kurtosis": {
+     "id": "quant:returns.excess_kurtosis",
+     "label": "Excess kurtosis of daily returns",
+     "status": "ok",
+     "value": 1.0392118715937855,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 252,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "adjusted sample excess kurtosis (normal = 0)",
+     "reason": null
+    },
+    "quant:returns.max_drawdown": {
+     "id": "quant:returns.max_drawdown",
+     "label": "Maximum drawdown",
+     "status": "ok",
+     "value": -0.31930278229253417,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 252,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "min of price / running peak - 1",
+     "reason": null
+    },
+    "quant:returns.var95_hist": {
+     "id": "quant:returns.var95_hist",
+     "label": "1-day 95% Value at Risk (historical)",
+     "status": "ok",
+     "value": 0.04190298598719445,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 252,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "-(5th percentile of daily returns)",
+     "reason": null
+    },
+    "quant:returns.var95_normal": {
+     "id": "quant:returns.var95_normal",
+     "label": "1-day 95% Value at Risk (normal)",
+     "status": "ok",
+     "value": 0.040534302061819905,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 252,
+     "n_kind": "observations",
+     "kind": "model",
+     "method": "-(mean + z_0.05 x sd), assumes normally distributed returns",
+     "reason": null
+    },
+    "quant:market.beta": {
+     "id": "quant:market.beta",
+     "label": "Beta vs S&P 500",
+     "status": "ok",
+     "value": 1.8909980673314009,
+     "unit": "x",
+     "interval": null,
+     "interval_level": null,
+     "n": 500,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "OLS slope of daily stock returns on S&P 500 returns",
+     "reason": null
+    },
+    "quant:market.beta_se": {
+     "id": "quant:market.beta_se",
+     "label": "Standard error of beta",
+     "status": "ok",
+     "value": 0.08739036784832367,
+     "unit": "x",
+     "interval": null,
+     "interval_level": null,
+     "n": 500,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "classical OLS standard error of the slope",
+     "reason": null
+    },
+    "quant:market.correlation": {
+     "id": "quant:market.correlation",
+     "label": "Correlation with S&P 500",
+     "status": "ok",
+     "value": 0.6961266762097568,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 500,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "Pearson correlation of daily returns",
+     "reason": null
+    },
+    "quant:market.alpha_daily": {
+     "id": "quant:market.alpha_daily",
+     "label": "OLS intercept (daily)",
+     "status": "ok",
+     "value": -0.00039792463694094266,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 500,
+     "n_kind": "observations",
+     "kind": "descriptive",
+     "method": "OLS intercept of daily returns",
+     "reason": null
+    },
+    "quant:capm.discount_rate": {
+     "id": "quant:capm.discount_rate",
+     "label": "CAPM discount rate",
+     "status": "ok",
+     "value": 0.14609,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 500,
+     "n_kind": "observations",
+     "kind": "model",
+     "method": "risk-free + clamp(beta, [0.5, 2.0]) x 5% ERP, clamped to [0.06, 0.15]",
+     "reason": null
+    },
+    "quant:mc_dcf.fair_value_p10": {
+     "id": "quant:mc_dcf.fair_value_p10",
+     "label": "DCF fair value per share, 10th percentile",
+     "status": "unavailable",
+     "value": null,
+     "unit": "USD",
+     "interval": null,
+     "interval_level": null,
+     "n": null,
+     "n_kind": "simulations",
+     "kind": "model",
+     "method": "10000 draws: FCF growth ~ Normal(hist. CAGR, hist. sd), discount ~ Normal(CAPM, 1%), terminal ~ Uniform(0.015, 0.03); 5y DCF less net debt",
+     "reason": "only 0 year(s) of free cash flow; at least 2 needed"
+    },
+    "quant:mc_dcf.fair_value_p50": {
+     "id": "quant:mc_dcf.fair_value_p50",
+     "label": "DCF fair value per share, median",
+     "status": "unavailable",
+     "value": null,
+     "unit": "USD",
+     "interval": null,
+     "interval_level": null,
+     "n": null,
+     "n_kind": "simulations",
+     "kind": "model",
+     "method": "10000 draws: FCF growth ~ Normal(hist. CAGR, hist. sd), discount ~ Normal(CAPM, 1%), terminal ~ Uniform(0.015, 0.03); 5y DCF less net debt",
+     "reason": "only 0 year(s) of free cash flow; at least 2 needed"
+    },
+    "quant:mc_dcf.fair_value_p90": {
+     "id": "quant:mc_dcf.fair_value_p90",
+     "label": "DCF fair value per share, 90th percentile",
+     "status": "unavailable",
+     "value": null,
+     "unit": "USD",
+     "interval": null,
+     "interval_level": null,
+     "n": null,
+     "n_kind": "simulations",
+     "kind": "model",
+     "method": "10000 draws: FCF growth ~ Normal(hist. CAGR, hist. sd), discount ~ Normal(CAPM, 1%), terminal ~ Uniform(0.015, 0.03); 5y DCF less net debt",
+     "reason": "only 0 year(s) of free cash flow; at least 2 needed"
+    },
+    "quant:mc_dcf.prob_fair_above_price": {
+     "id": "quant:mc_dcf.prob_fair_above_price",
+     "label": "Share of simulations with fair value above price",
+     "status": "unavailable",
+     "value": null,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": null,
+     "n_kind": "simulations",
+     "kind": "model",
+     "method": "10000 draws: FCF growth ~ Normal(hist. CAGR, hist. sd), discount ~ Normal(CAPM, 1%), terminal ~ Uniform(0.015, 0.03); 5y DCF less net debt",
+     "reason": "only 0 year(s) of free cash flow; at least 2 needed"
+    },
+    "quant:forward.prob_up_bootstrap": {
+     "id": "quant:forward.prob_up_bootstrap",
+     "label": "P(price above today in 63 trading days), bootstrap",
+     "status": "ok",
+     "value": 0.5415,
+     "unit": "ratio",
+     "interval": [
+      0.464975,
+      0.5365249999999999
+     ],
+     "interval_level": 0.9,
+     "n": 10000,
+     "n_kind": "simulations",
+     "kind": "prediction",
+     "method": "moving-block bootstrap, block 5, 10000 paths of 63 days, trend removed (log returns de-meaned); seed 43; interval: 200 resampled histories x 2000 paths",
+     "reason": null
+    },
+    "quant:forward.prob_up_normal": {
+     "id": "quant:forward.prob_up_normal",
+     "label": "P(price above today in 63 trading days), normal",
+     "status": "ok",
+     "value": 0.5,
+     "unit": "ratio",
+     "interval": [
+      0.5,
+      0.5
+     ],
+     "interval_level": 0.9,
+     "n": 252,
+     "n_kind": "observations",
+     "kind": "prediction",
+     "method": "i.i.d. normal log returns over 63 days, trend removed (log returns de-meaned); interval from mean +/- 1.645 sd/sqrt(n)",
+     "reason": null
+    },
+    "quant:forward.return_p5": {
+     "id": "quant:forward.return_p5",
+     "label": "63-day return, 5th percentile (bootstrap)",
+     "status": "ok",
+     "value": -0.2533355483635753,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 10000,
+     "n_kind": "simulations",
+     "kind": "prediction",
+     "method": "moving-block bootstrap, block 5, 10000 paths of 63 days, trend removed (log returns de-meaned); seed 43",
+     "reason": null
+    },
+    "quant:forward.return_p50": {
+     "id": "quant:forward.return_p50",
+     "label": "63-day return, median (bootstrap)",
+     "status": "ok",
+     "value": 0.0198330461241674,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 10000,
+     "n_kind": "simulations",
+     "kind": "prediction",
+     "method": "moving-block bootstrap, block 5, 10000 paths of 63 days, trend removed (log returns de-meaned); seed 43",
+     "reason": null
+    },
+    "quant:forward.return_p95": {
+     "id": "quant:forward.return_p95",
+     "label": "63-day return, 95th percentile (bootstrap)",
+     "status": "ok",
+     "value": 0.37943230958702656,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 10000,
+     "n_kind": "simulations",
+     "kind": "prediction",
+     "method": "moving-block bootstrap, block 5, 10000 paths of 63 days, trend removed (log returns de-meaned); seed 43",
+     "reason": null
+    },
+    "quant:base_rate.share_up": {
+     "id": "quant:base_rate.share_up",
+     "label": "Share of similar past cases that rose over 63 trading days",
+     "status": "unavailable",
+     "value": null,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 1,
+     "n_kind": "cases",
+     "kind": "descriptive",
+     "method": "own history, non-overlapping 63-day windows; similar = momentum within +/-10% points and trailing PE within +/-25%; Wilson 95% interval",
+     "reason": "insufficient data: 1 similar cases out of 37; at least 30 needed"
+    },
+    "quant:calibration.brier": {
+     "id": "quant:calibration.brier",
+     "label": "Brier score of past forward.prob_up_bootstrap forecasts",
+     "status": "unavailable",
+     "value": null,
+     "unit": "ratio",
+     "interval": null,
+     "interval_level": null,
+     "n": 0,
+     "n_kind": "pairs",
+     "kind": "descriptive",
+     "method": "mean squared difference between stated probability and outcome (0 best, 0.25 = coin flip)",
+     "reason": "only 0 recorded forecast/outcome pairs; at least 20 needed"
+    }
+   },
+   "reliability": null,
+   "notes": [
+    "base rates: 37 non-overlapping 63-day cases from 2514 closes; EPS split-adjusted for splits after each filing"
+   ]
+  },
+  "debate_log": "/home/shubham/Kai-The-Smart-Investor/tests/artifacts/debate_logs/NVDA_balanced_20261114_103314_8d244e.json",
+  "timestamp": "2026-11-14T10:37:23.283022",
+  "signature": "EaHA59y6MjkLdREWr2TVC6W7Ly95ygE/c1+qyuiaQBKkceHL0g9067C06X3RrcGH1czYYSK4xdJdp0LO+YAVDw==",
+  "public_key": "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUNvd0JRWURLMlZ3QXlFQWw1WHU3WjNSYWhvYjNLc213S0oybVBBMVpMb2R1czdsMWlVd2VTTlF2RkU9Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo=",
+  "verification_url": "https://kai.verify/packet_d74dd723b44173d0",
+  "version": "AP2-v1.0"
+ },
+ "notification": {
+  "type": "info",
+  "message": "Analysis complete for NVDA. Recommendation: Hold (10% confidence in Hold)",
+  "recommendation": "Hold",
+  "confidence": 9.64
+ },
+ "step_up_challenge": null
+}

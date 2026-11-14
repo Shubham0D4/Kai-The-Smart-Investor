@@ -26,12 +26,13 @@ from mcp_server.tools.market_data import fetch_market_data
 from mcp_server.tools.sec_financials import fcf_history, fetch_financial_statements, latest, net_debt, series
 from quant import QuantReport, build_quant_report, inputs_from_fetched
 from agents.schema import (
-    EvidenceRecord, agent_error, format_evidence, generate_agent_output,
+    EvidenceRecord, agent_error, evidence_block, generate_agent_output,
     render_output, schema_instructions,
 )
 
 # Import Multi-LLM Client
 from coordinator.llm_client import MultiLLMClient
+from coordinator.llm_config import load_llm_config
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -75,7 +76,7 @@ class GammaAgent:
         self.thresholds = thresholds
 
         system_instruction = get_gamma_system_instruction()
-        self.model = llm_client if llm_client is not None else MultiLLMClient(system_instruction=system_instruction)
+        self.model = llm_client if llm_client is not None else MultiLLMClient(system_instruction=system_instruction, role="gamma")
 
     @property
     def cfg(self) -> Thresholds:
@@ -120,15 +121,20 @@ class GammaAgent:
         valuation: Dict = {"pe_ratio": None, "peg_ratio": None, "eps_growth_pct": None,
                            "dcf_analysis": None, "margin_of_safety": None}
 
-        # --- PE and PEG from SEC diluted EPS
-        eps_rec = latest(sec, "eps_diluted")
+        # --- PE on trailing-twelve-month EPS (same snapshot as the price), PEG from FY EPS growth
+        eps_rec = next((r for r in sec if r["id"] == "sec:eps_diluted:TTM"), None)
+        if eps_rec is None:
+            eps_rec = latest(sec, "eps_diluted")
+            if eps_rec:
+                warnings.append(f"no TTM EPS: PE uses {eps_rec['id']} ({eps_rec.get('period')})")
         eps = eps_rec["value"] if eps_rec else None
         eps_hist = series(sec, "eps_diluted")
         if eps and eps > 0:
             pe = calculate_pe_ratio(price, eps)
             valuation["pe_ratio"] = pe
-            evidence.append(_calc("calc:pe", "Price / diluted EPS", pe, "x",
-                                  f"mkt:price / {eps_rec['id']}"))
+            ttm = eps_rec["id"].endswith(":TTM")
+            evidence.append(_calc("calc:pe", f"Price / diluted EPS ({'trailing 12 months' if ttm else 'last fiscal year'})",
+                                  pe, "x", f"mkt:price / {eps_rec['id']}", eps_rec.get("period")))
             g = _cagr(eps_hist[0]["value"], eps_hist[-1]["value"], len(eps_hist) - 1) if len(eps_hist) >= 2 else None
             if g is not None:
                 valuation["eps_growth_pct"] = round(g * 100, 4)
@@ -209,8 +215,6 @@ class GammaAgent:
         period = f"{window[0]['date']}..{window[-1]['date']}"
         evidence.append(_calc("calc:sharpe", "Sharpe ratio (rf 2%)", risk.get("sharpe_ratio"), "x",
                               "(mean daily return * 252 - 0.02) / annualised volatility", period))
-        evidence.append(_calc("calc:return_1y", "Price return over history", risk["return_1y"], "ratio",
-                              "mkt:price_1y_ago -> last close", period))
         for ma in ("ma_50", "ma_200"):
             if risk.get(ma) is not None:
                 evidence.append(_calc(f"calc:{ma}", f"{ma[3:]}-day moving average", risk[ma], "USD",
@@ -235,7 +239,7 @@ class GammaAgent:
         }
 
     def analyze(self, ticker: str, financials: Optional[Dict] = None, market: Optional[Dict] = None,
-                quant_report: Optional[QuantReport] = None) -> Dict:
+                quant_report: Optional[QuantReport] = None, budget_left=None) -> Dict:
         """
         Perform valuation analysis on a ticker. All inputs are fetched, none are user-supplied.
 
@@ -262,13 +266,12 @@ class GammaAgent:
         evidence = computed["evidence"]
 
         prompt = f"""
+{evidence_block(evidence)}
+
 Assess the valuation of {ticker} using ONLY the market data, SEC figures, computed metrics and
-quant-report fields below. All of them were computed in code; do not recompute them with
+quant-report fields above. All of them were computed in code; do not recompute them with
 different inputs. Quant fields (ids starting "quant:") state their method and sample size; a
 claim using one must cite that id, and its value must match the report.
-
-EVIDENCE:
-{format_evidence(evidence)}
 
 Notes from the data step: {'; '.join(computed['warnings']) or 'none'}
 Quant fields that could not be computed (do not cite them): {'; '.join(computed['quant_unavailable']) or 'none'}
@@ -280,14 +283,15 @@ to the discount rate, and what the risk metrics say. State your valuation stance
 """
         print(f"[Gamma] Analyzing valuation for {ticker}...")
         result = generate_agent_output(
-            self.model, prompt, agent="gamma", round_number=1,
-            evidence_ids=[e.id for e in evidence],
+            self.model, prompt, agent="gamma", round_number=1, evidence=evidence,
+            max_output_tokens=load_llm_config().max_output_tokens.round1, budget_left=budget_left,
         )
         if not result.ok:
             # The computed metrics stay available to the judge's gates even when the
             # LLM output fails (margin of safety, volatility).
             return agent_error("gamma", ticker, result.error, result.error_type,
-                               token_usage=result.token_usage, attempts=result.attempts,
+                               token_usage=result.token_usage, attempts=result.attempts, models=result.models,
+                               repaired_from=result.repaired_from,
                                evidence=[e.model_dump() for e in evidence])
 
         return {
@@ -303,6 +307,8 @@ to the discount rate, and what the risk metrics say. State your valuation stance
             "warnings": computed["warnings"],
             "attempts": result.attempts,
             "token_usage": result.token_usage,
+            "models": result.models,
+            "repaired_from": result.repaired_from,
         }
 
     def get_agent_card(self) -> Dict:

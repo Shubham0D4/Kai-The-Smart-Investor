@@ -5,6 +5,7 @@ beta) and the 10-year Treasury yield (risk-free rate for CAPM). Price and histor
 their absence is reported as a warning. Failures return success=False with an explicit error.
 """
 
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 import yfinance as yf
@@ -13,6 +14,41 @@ BENCHMARK = "^GSPC"      # S&P 500
 RISK_FREE = "^TNX"       # 10-year Treasury yield, quoted in percent
 TRADING_DAYS_1Y = 252
 TRADING_DAYS_2Y = 504
+# Price-return windows in trading days; every return record carries its exact start..end dates,
+# so agents cannot compare a 1-month move with a 1-year one by accident.
+RETURN_WINDOWS = (("5d", "5 trading days", 5), ("1m", "1 month", 21), ("3m", "3 months", 63),
+                  ("6m", "6 months", 126), ("1y", "1 year", 252))
+
+
+def return_records(history: List[Dict], ticker: str) -> List[Dict]:
+    """Windowed price returns, year to date, and the drawdown from the 52-week high."""
+    last = history[-1]
+    url = f"https://finance.yahoo.com/quote/{ticker}/history"
+    out = []
+    for key, label, n in RETURN_WINDOWS:
+        if len(history) > n:
+            start = history[-1 - n]
+            out.append({"id": f"mkt:return_{key}", "label": f"Price return, {label}",
+                        "value": round(last["close"] / start["close"] - 1, 6), "unit": "ratio",
+                        "period": f"{start['date']}..{last['date']}",
+                        "source": "yfinance daily closes (split-adjusted)", "url": url})
+    prior_year = [p for p in history if p["date"][:4] < last["date"][:4]]
+    if prior_year:
+        start = prior_year[-1]
+        out.append({"id": "mkt:return_ytd", "label": "Price return, year to date",
+                    "value": round(last["close"] / start["close"] - 1, 6), "unit": "ratio",
+                    "period": f"{start['date']}..{last['date']}",
+                    "source": "yfinance daily closes (split-adjusted)", "url": url})
+    year = history[-TRADING_DAYS_1Y:]
+    high = max(year, key=lambda p: p["close"])
+    out.append({"id": "mkt:high_52w", "label": f"52-week closing high (on {high['date']})",
+                "value": round(high["close"], 4), "unit": "USD", "period": f"{year[0]['date']}..{last['date']}",
+                "source": "yfinance daily closes (split-adjusted)", "url": url})
+    out.append({"id": "mkt:drawdown_from_52w_high", "label": "Last close vs 52-week high",
+                "value": round(last["close"] / high["close"] - 1, 6), "unit": "ratio",
+                "period": f"{high['date']}..{last['date']}",
+                "source": "yfinance daily closes (split-adjusted)", "url": url})
+    return out
 
 
 def _closes(ticker, period: str) -> List[Dict]:
@@ -34,6 +70,7 @@ def fetch_market_data(ticker: str, period: str = "10y", benchmark_period: str = 
     or {success: False, ticker, error}. Closes are split-adjusted by yfinance.
     """
     t = ticker.upper()
+    fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
         tk = yf.Ticker(t)
         fi = tk.fast_info
@@ -79,7 +116,7 @@ def fetch_market_data(ticker: str, period: str = "10y", benchmark_period: str = 
         "value": round(price, 4),
         "unit": "USD",
         "period": history[-1]["date"],
-        "source": "yfinance fast_info.last_price",
+        "source": "yfinance fast_info.last_price (fetch time in the debate's market snapshot)",
         "url": f"https://finance.yahoo.com/quote/{t}",
     }, {
         "id": "mkt:price_1y_ago",
@@ -110,10 +147,13 @@ def fetch_market_data(ticker: str, period: str = "10y", benchmark_period: str = 
             "source": f"yfinance {RISK_FREE} / 100",
             "url": "https://finance.yahoo.com/quote/%5ETNX",
         })
+    records += return_records(history, t)
 
     return {
         "success": True,
         "ticker": t,
+        "fetched_at": fetched_at,
+        "market_date": history[-1]["date"],
         "price": price,
         "previous_close": getattr(fi, "previous_close", None),
         "shares_outstanding": float(shares) if shares else None,

@@ -1,0 +1,56 @@
+# Kai model routing and token budget. Edit by hand; validated at load time.
+# Override the path with KAI_LLM_CONFIG_PATH.
+#
+# Each role has a chain of models, tried in order: if a model fails (error, rate limit, retired
+# id), the next one answers. Different agents start on different models so one provider's rate
+# limit does not stall the whole debate, and so the debate is not one model arguing with itself.
+#
+#   provider  : groq | gemini
+#   reasoning : groq reasoning models (gpt-oss): low | medium | high. Hidden reasoning is billed
+#               as output tokens; "low" cut a real round-2 call from 11.5k to 7.5k tokens.
+#   thinking_budget : gemini 2.5: max hidden thinking tokens (0 = off)
+#   thinking_level  : gemini 3.x: minimal | low | medium | high
+# Model ids are retired by providers from time to time; if a call says "model not found",
+# replace the id here (list what your key can use with: python -m coordinator.llm_client --list).
+roles:
+  charlie:                       # SEC numbers: strongest reasoning model first
+    - {provider: groq, model: openai/gpt-oss-120b, reasoning: low}
+    - {provider: gemini, model: gemini-2.5-flash, thinking_budget: 512}
+    - {provider: gemini, model: gemini-3.5-flash-lite, thinking_level: minimal}
+  delta:                         # news text: long input, light reasoning
+    - {provider: gemini, model: gemini-3.5-flash-lite, thinking_level: minimal}
+    - {provider: groq, model: openai/gpt-oss-20b, reasoning: low}
+    - {provider: groq, model: openai/gpt-oss-120b, reasoning: low}
+  gamma:                         # valuation and risk metrics
+    # gemini-2.5-flash free tier: only 20 requests per day (measured 2026-11-14); the chain
+    # falls through to the next model when that quota is used up
+    - {provider: gemini, model: gemini-2.5-flash, thinking_budget: 512}
+    - {provider: groq, model: openai/gpt-oss-120b, reasoning: low}
+    - {provider: gemini, model: gemini-3.5-flash-lite, thinking_level: minimal}
+  vega:                          # catalysts, analyst revisions, options
+    - {provider: gemini, model: gemini-3.5-flash, thinking_level: low}
+    - {provider: groq, model: openai/gpt-oss-20b, reasoning: low}
+    - {provider: gemini, model: gemini-3.5-flash-lite, thinking_level: minimal}
+  sigma:                         # explanation and suggestions; runs after the debate, so sharing
+                                 # Charlie's model causes no rate-limit contention. The verdict and
+                                 # every suggestion number are computed in code.
+    - {provider: groq, model: openai/gpt-oss-120b, reasoning: low}
+    - {provider: gemini, model: gemini-3.5-flash, thinking_level: low}
+  chat:                          # dashboard assistant (Groq only)
+    - {provider: groq, model: openai/gpt-oss-20b, reasoning: low}
+
+# Output cap per call (includes hidden reasoning). A reply cut off by the cap fails validation.
+max_output_tokens:
+  round1: 3000
+  round2: 2000
+  round3: 3500
+  narrative: 1200
+
+# The debate's token limit (circuit_breaker.token_limit in thresholds.yaml) is divided between
+# the agents. An agent may use its share plus whatever is left of the shared reserve; one that
+# cannot afford its next call is left out of the rest of the debate with a warning, instead of
+# exhausting the budget for everyone. Shares must sum to less than 1; the rest is the reserve.
+budget:
+  # measured in live four-agent debates: Gamma's evidence (SEC + market + quant report) is the
+  # largest, so its share is too; Delta's round 3 usually needs a repair
+  shares: {charlie: 0.20, delta: 0.19, gamma: 0.25, vega: 0.16}

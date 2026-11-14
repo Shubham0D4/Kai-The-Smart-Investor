@@ -40,6 +40,16 @@ class CircuitBreakerConfig(_Strict):
     token_limit: int = Field(gt=0)
 
 
+class JudgeConfig(_Strict):
+    weights: Dict[Literal["charlie", "delta", "gamma", "vega"], float]
+
+    @model_validator(mode="after")
+    def _positive(self):
+        if any(w <= 0 for w in self.weights.values()):
+            raise ValueError("judge.weights must be positive")
+        return self
+
+
 class IntegrityConfig(_Strict):
     unexplained_stance_penalty: float = Field(ge=0, le=1)
     retained_failed_claim_penalty: float = Field(ge=0, le=1)
@@ -136,6 +146,7 @@ class Thresholds(_Strict):
     personas: Dict[Literal["zen", "balanced", "alpha"], PersonaThresholds]
     verification: VerificationConfig
     circuit_breaker: CircuitBreakerConfig
+    judge: JudgeConfig
     integrity: IntegrityConfig
     capm: CapmConfig
     hitl: HitlConfig

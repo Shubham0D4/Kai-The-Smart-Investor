@@ -2,9 +2,15 @@
 SEC XBRL company facts: annual financial statement numbers for Charlie and Gamma.
 
 Fetches https://data.sec.gov/api/xbrl/companyfacts/CIK##########.json and extracts the last
-five fiscal years of a fixed set of line items. Every value becomes an evidence record with
-the accession number of the filing it came from. Network or parsing failures return
-success=False with an explicit error; nothing is guessed.
+five fiscal years of a fixed set of line items, plus trailing-twelve-month (TTM) values built
+from the latest 10-Q. Every value becomes an evidence record with the accession number of the
+filing it came from. Network or parsing failures return success=False with an explicit error;
+nothing is guessed.
+
+Stock splits: a per-share value (EPS) or share count reported in a filing made BEFORE a split
+is on the old share basis (seen live: NVDA's FY2022 EPS 3.85 from a filing before its 2024
+10-for-1 split made a 4-year EPS growth look like 6% a year). When the split history is given,
+such values are converted to today's share basis and the record says so.
 """
 
 from datetime import date
@@ -93,6 +99,66 @@ def _annual_facts(concept: Dict, unit: str, kind: str, as_of: Optional[str] = No
     return out
 
 
+PER_SHARE = {"eps_diluted"}
+TTM_METRICS = ("revenue", "net_income", "eps_diluted", "operating_cash_flow")
+
+
+def split_factor(filed: Optional[str], splits: Optional[List[Dict]]) -> float:
+    """Product of split ratios dated after the filing date (1.0 when none)."""
+    factor = 1.0
+    for sp in splits or []:
+        if filed and sp["date"] > filed and sp.get("ratio"):
+            factor *= float(sp["ratio"])
+    return factor
+
+
+def _adjust(rec: Dict, splits: Optional[List[Dict]], per_share: bool) -> Dict:
+    """Put a per-share value or a share count on today's share basis."""
+    factor = split_factor(rec.get("filed"), splits)
+    if factor == 1.0:
+        return rec
+    rec = dict(rec)
+    rec["value"] = rec["value"] / factor if per_share else rec["value"] * factor
+    rec["label"] += f" (split-adjusted, {'/' if per_share else 'x'}{factor:g})"
+    rec["source"] += f"; adjusted for stock splits after {rec.get('filed')} (x{factor:g})"
+    return rec
+
+
+def _quarterly_facts(concept: Dict, unit: str, as_of: Optional[str]) -> List[Dict]:
+    return [f for f in concept.get("units", {}).get(unit, [])
+            if f.get("form") == "10-Q" and "start" in f and (not as_of or f.get("filed", "") <= as_of)]
+
+
+def _ttm(concept: Dict, unit: str, annual: Dict[str, Dict], as_of: Optional[str],
+         splits: Optional[List[Dict]], per_share: bool) -> Optional[Dict]:
+    """Trailing twelve months: the latest 10-K year if no 10-Q is newer; otherwise
+    last fiscal year + year-to-date - the same year-to-date one year earlier."""
+    if not annual:
+        return None
+    fy_end = max(annual)
+    fy = annual[fy_end]
+    ytd = [f for f in _quarterly_facts(concept, unit, as_of)
+           if f["start"] > fy_end and f["end"] > fy_end and _days(fy_end, f["start"]) <= 7]
+    if not ytd:
+        return {"start": fy.get("start"), "end": fy_end, "parts": [fy], "how": "latest 10-K fiscal year",
+                "value": float(fy["val"]) / (split_factor(fy.get("filed"), splits) if per_share else 1)}
+    cur = max(ytd, key=lambda f: (f["end"], f.get("filed", "")))
+    length = _days(cur["start"], cur["end"])
+    prior = [f for f in concept.get("units", {}).get(unit, [])
+             if "start" in f and (not as_of or f.get("filed", "") <= as_of)
+             and abs(_days(f["start"], f["end"]) - length) <= 10
+             and 350 <= _days(f["end"], cur["end"]) <= 380]
+    if not prior:
+        return None
+    prev = max(prior, key=lambda f: f.get("filed", ""))
+    adj = (lambda f: float(f["val"]) / split_factor(f.get("filed"), splits)) if per_share else (lambda f: float(f["val"]))
+    value = adj(fy) + adj(cur) - adj(prev)
+    start = (date.fromisoformat(cur["end"]).replace(year=date.fromisoformat(cur["end"]).year - 1)).isoformat()
+    months = round(length / 30.4)
+    return {"start": start, "end": cur["end"], "parts": [fy, cur, prev], "value": value,
+            "how": f"FY to {fy_end} + {months}M to {cur['end']} - {months}M to {prev['end']}"}
+
+
 def _record(metric: str, fact: Dict, cik: str, concept: str) -> Dict:
     label, unit, _, _ = METRICS[metric] if metric in METRICS else (metric, "USD", [], "instant")
     fy = _fiscal_label(fact["end"])
@@ -109,9 +175,11 @@ def _record(metric: str, fact: Dict, cik: str, concept: str) -> Dict:
     }
 
 
-def parse_company_facts(facts: Dict, cik: str, years: int = YEARS, as_of: Optional[str] = None) -> Dict:
+def parse_company_facts(facts: Dict, cik: str, years: int = YEARS, as_of: Optional[str] = None,
+                        splits: Optional[List[Dict]] = None) -> Dict:
     """Pure function: companyfacts JSON -> evidence records. Raises SECDataError if unusable.
-    With as_of (ISO date) only facts filed on or before that date are used."""
+    With as_of (ISO date) only facts filed on or before that date are used. With splits
+    ([{date, ratio}]) per-share values and share counts are put on today's share basis."""
     gaap = facts.get("facts", {}).get("us-gaap", {})
     if not gaap:
         raise SECDataError("company facts contain no us-gaap data")
@@ -145,14 +213,37 @@ def parse_company_facts(facts: Dict, cik: str, years: int = YEARS, as_of: Option
         for end in fy_ends:
             if end in by_end:
                 f, concept = by_end[end]
-                records.append(_record(metric, f, cik, concept))
+                records.append(_adjust(_record(metric, f, cik, concept), splits, metric in PER_SHARE))
+
+    # Trailing twelve months from the latest 10-Q (or the latest 10-K when it is newer)
+    for metric in TTM_METRICS:
+        _, unit, concepts, _ = METRICS[metric]
+        concept = next((c for c in concepts if c in gaap), None)
+        annual = {end: f for end, (f, c) in per_metric[metric].items() if c == concept}
+        t = _ttm(gaap[concept], unit, annual, as_of, splits, metric in PER_SHARE) if concept else None
+        if t is None:
+            continue
+        last = max(t["parts"], key=lambda f: f.get("filed", ""))
+        label = METRICS[metric][0]
+        records.append({
+            "id": f"sec:{metric}:TTM",
+            "label": f"{label}, trailing 12 months to {t['end']}",
+            "value": round(t["value"], 6) if metric in PER_SHARE else t["value"],
+            "unit": unit,
+            "period": f"{t['start']}..{t['end']}",
+            "source": f"SEC XBRL {concept}: {t['how']}"
+                      + ("; split-adjusted" if metric in PER_SHARE and splits else ""),
+            "url": ARCHIVE_URL.format(cik=int(cik), accn_nodash=last.get("accn", "").replace("-", ""))
+                   if last.get("accn") else None,
+            "filed": last.get("filed"),
+        })
 
     # Current shares outstanding from the cover page (dei)
     dei = facts.get("facts", {}).get("dei", {}).get("EntityCommonStockSharesOutstanding", {})
     share_facts = [f for f in dei.get("units", {}).get("shares", []) if not as_of or f.get("filed", "") <= as_of]
     if share_facts:
         latest = max(share_facts, key=lambda f: (f["end"], f.get("filed", "")))
-        records.append({
+        records.append(_adjust({
             "id": "sec:shares_outstanding:latest",
             "label": "Common shares outstanding",
             "value": float(latest["val"]),
@@ -161,7 +252,7 @@ def parse_company_facts(facts: Dict, cik: str, years: int = YEARS, as_of: Option
             "source": f"SEC XBRL dei:EntityCommonStockSharesOutstanding, {latest.get('form', '')} filed {latest.get('filed', '')}",
             "url": None,
             "filed": latest.get("filed"),
-        })
+        }, splits, per_share=False))
 
     # Every annual diluted EPS as FIRST reported, with its filing date (for trailing PE at past
     # dates without look-ahead). Values are on the share basis of the filing date.
@@ -177,9 +268,10 @@ def parse_company_facts(facts: Dict, cik: str, years: int = YEARS, as_of: Option
     }
 
 
-def fetch_financial_statements(ticker: str, years: int = YEARS) -> Dict:
+def fetch_financial_statements(ticker: str, years: int = YEARS, splits: Optional[List[Dict]] = None) -> Dict:
     """
-    MCP tool: last `years` fiscal years of financial statement numbers from SEC XBRL.
+    MCP tool: last `years` fiscal years of financial statement numbers from SEC XBRL, plus TTM.
+    splits ([{date, ratio}], e.g. from fetch_market_data) puts per-share values on today's basis.
 
     Returns {success, ticker, cik, company_name, fiscal_years, records[]} or
     {success: False, ticker, error}.
@@ -187,7 +279,7 @@ def fetch_financial_statements(ticker: str, years: int = YEARS) -> Dict:
     try:
         cik = lookup_cik(ticker)
         facts = _get_json(COMPANY_FACTS_URL.format(cik=cik))
-        parsed = parse_company_facts(facts, cik, years)
+        parsed = parse_company_facts(facts, cik, years, splits=splits)
         return {
             "success": True,
             "ticker": ticker.upper(),
@@ -228,8 +320,10 @@ def net_debt(records: List[Dict]) -> Dict:
 
 
 def latest(records: List[Dict], metric: str) -> Optional[Dict]:
-    """Most recent fiscal-year record for a metric (records are ordered oldest first)."""
-    found = [r for r in records if r["id"].startswith(f"sec:{metric}:")]
+    """Most recent fiscal-year record for a metric (records are ordered oldest first; TTM and
+    'latest' records are not fiscal years)."""
+    found = [r for r in records if r["id"].startswith(f"sec:{metric}:")
+             and not r["id"].endswith(":TTM")]
     return found[-1] if found else None
 
 

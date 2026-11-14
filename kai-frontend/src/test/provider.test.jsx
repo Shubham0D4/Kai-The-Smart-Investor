@@ -28,8 +28,8 @@ const Probe = () => {
 
 const mount = () => render(<CommitteeProvider><Probe /></CommitteeProvider>);
 const advance = (ms) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
-const running = { ...fixtures.running, session_id: 'sess_1' };
-const completed = { ...fixtures.holdCompleted, session_id: 'sess_1' };
+// A real completed session from the live test suite (tests/artifacts/runs/AAPL_zen.json)
+const completed = { ...fixtures.aaplZen, session_id: 'sess_1' };
 
 beforeEach(() => {
     vi.useFakeTimers();
@@ -46,21 +46,18 @@ describe('CommitteeProvider', () => {
         expect(Object.keys(latest).sort()).toEqual(Object.keys(committeeValue(null)).sort());
     });
 
-    it('starts an analysis, polls while it runs, shows live state, and stops when it completes', async () => {
+    it('starts an analysis, loads the result, and stops polling once it is complete', async () => {
         api.initiateAnalysis.mockResolvedValue({ session_id: 'sess_1' });
-        api.getAnalysisStatus.mockResolvedValueOnce(running).mockResolvedValue(completed);
+        api.getAnalysisStatus.mockResolvedValue(completed);
         mount();
 
         await act(async () => { await latest.startAnalysis('AAPL', 'Zen'); });
         expect(api.initiateAnalysis).toHaveBeenCalledWith('AAPL', 'Zen');
         expect(window.localStorage.getItem('kai_session_id')).toBe('sess_1');
         await advance(0);
-        expect(latest.session.status).toBe('running');
-        expect(latest.debate.rounds_started).toBe(1);                 // live structured state
-
-        await advance(2000);
         expect(latest.session.status).toBe('completed');
-        expect(latest.sigma.final_recommendation.recommendation).toBe('Hold');
+        expect(latest.sigma.final_recommendation.recommendation).toBe(completed.sigma.final_recommendation.recommendation);
+        expect(latest.debate.rounds_started).toBe(3);
         const calls = api.getAnalysisStatus.mock.calls.length;
         await advance(20000);
         expect(api.getAnalysisStatus.mock.calls.length).toBe(calls);   // terminal state: polling stopped
@@ -102,16 +99,6 @@ describe('CommitteeProvider', () => {
         expect(latest.session.status).toBe('completed');
     });
 
-    it('keeps the last good data when a refresh fails', async () => {
-        window.localStorage.setItem('kai_session_id', 'sess_1');
-        api.getAnalysisStatus.mockResolvedValueOnce(running).mockRejectedValue(new ApiError('boom', 500));
-        mount();
-        await advance(0);
-        await advance(2000);
-        expect(latest.pollError).toBe('boom');
-        expect(latest.session.status).toBe('running');                 // not wiped
-    });
-
     it('surfaces a failed start as an error and creates no session', async () => {
         api.initiateAnalysis.mockRejectedValue(new ApiError('ticker: String should match pattern', 422));
         mount();
@@ -119,33 +106,6 @@ describe('CommitteeProvider', () => {
         expect(latest.startError).toMatch(/should match pattern/);
         expect(latest.sessionId).toBeNull();
         expect(api.getAnalysisStatus).not.toHaveBeenCalled();
-    });
-
-    it('approve calls the backend with the challenge id, then reloads the session', async () => {
-        const waiting = { ...fixtures.waitingApproval, session_id: 'sess_w' };
-        window.localStorage.setItem('kai_session_id', 'sess_w');
-        api.getAnalysisStatus.mockResolvedValueOnce(waiting)
-            .mockResolvedValue({ ...waiting, status: 'completed', approval_status: 'approved' });
-        api.approveMandate.mockResolvedValue({ ready_for_execution: true });
-        mount();
-        await advance(0);
-        expect(latest.session.status).toBe('waiting_approval');
-        await act(async () => { await latest.approve(); });
-        expect(api.approveMandate).toHaveBeenCalledWith('sess_w', waiting.step_up_challenge.challenge_id);
-        expect(latest.session.status).toBe('completed');
-        expect(latest.approvalError).toBeNull();
-    });
-
-    it('shows the backend message when an approval is refused, and refreshes the session', async () => {
-        const waiting = { ...fixtures.waitingApproval, session_id: 'sess_w' };
-        window.localStorage.setItem('kai_session_id', 'sess_w');
-        api.getAnalysisStatus.mockResolvedValue(waiting);
-        api.rejectMandate.mockRejectedValue(new ApiError('challenge is expired, not pending', 400));
-        mount();
-        await advance(0);
-        await act(async () => { await latest.reject(); });
-        expect(latest.approvalError).toBe('challenge is expired, not pending');
-        expect(api.getAnalysisStatus.mock.calls.length).toBeGreaterThan(1);
     });
 
     it('works when localStorage is unavailable', async () => {

@@ -16,9 +16,10 @@ from coordinator.personas import get_charlie_system_instruction
 from mcp_server.tools.sec_filings import fetch_filing_data
 from mcp_server.tools.sec_financials import fetch_financial_statements
 from agents.schema import (
-    EvidenceRecord, agent_error, format_evidence, generate_agent_output,
+    EvidenceRecord, agent_error, evidence_block, generate_agent_output,
     render_output, schema_instructions,
 )
+from coordinator.llm_config import load_llm_config
 
 # Import Multi-LLM Client
 from coordinator.llm_client import MultiLLMClient
@@ -47,9 +48,10 @@ class CharlieAgent:
         self.role = "Fundamental Analysis Specialist"
 
         system_instruction = get_charlie_system_instruction()
-        self.model = llm_client if llm_client is not None else MultiLLMClient(system_instruction=system_instruction)
+        self.model = llm_client if llm_client is not None else MultiLLMClient(system_instruction=system_instruction, role="charlie")
 
-    def analyze(self, ticker: str, filing_type: str = "10-K", financials: Optional[Dict] = None) -> Dict:
+    def analyze(self, ticker: str, filing_type: str = "10-K", financials: Optional[Dict] = None,
+                budget_left=None) -> Dict:
         """
         Perform fundamental analysis on a ticker.
 
@@ -58,6 +60,7 @@ class CharlieAgent:
             filing_type: Filing type used for the reference link only (default: 10-K)
             financials: Pre-fetched result of fetch_financial_statements (the coordinator
                         shares one fetch with Gamma); fetched here when None.
+            budget_left: Optional callable returning the tokens this agent may still spend.
 
         Returns:
             Result dict with the validated output, or an explicit error. No LLM call is
@@ -85,12 +88,10 @@ class CharlieAgent:
                             f"{filing_data.get('error') or 'no filings found'}")
 
         prompt = f"""
+{evidence_block(evidence)}
+
 Analyze {company_name} ({ticker}) from a fundamental perspective using ONLY the SEC financial
-statement data below (fiscal years {', '.join(financials['fiscal_years'])}).
-
-EVIDENCE:
-{format_evidence(evidence)}
-
+statement data above (fiscal years {', '.join(financials['fiscal_years'])}).
 Assess revenue and earnings trend, margins, cash generation, leverage and balance-sheet
 strength. State your fundamental stance.
 
@@ -98,12 +99,13 @@ strength. State your fundamental stance.
 """
         print(f"[Charlie] Analyzing {ticker}...")
         result = generate_agent_output(
-            self.model, prompt, agent="charlie", round_number=1,
-            evidence_ids=[e.id for e in evidence],
+            self.model, prompt, agent="charlie", round_number=1, evidence=evidence,
+            max_output_tokens=load_llm_config().max_output_tokens.round1, budget_left=budget_left,
         )
         if not result.ok:
             return agent_error("charlie", ticker, result.error, result.error_type,
-                               token_usage=result.token_usage, attempts=result.attempts)
+                               token_usage=result.token_usage, attempts=result.attempts, models=result.models,
+                               repaired_from=result.repaired_from)
 
         return {
             "agent": self.name,
@@ -117,6 +119,8 @@ strength. State your fundamental stance.
             "warnings": warnings,
             "attempts": result.attempts,
             "token_usage": result.token_usage,
+            "models": result.models,
+            "repaired_from": result.repaired_from,
         }
 
     def get_agent_card(self) -> Dict:

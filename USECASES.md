@@ -42,7 +42,7 @@ This document explains **who Kai is for, what problems it solves, and how to use
 | UC7 | First-pass diligence | Analyst | Claims with evidence, source popovers | A fact-checked starting point |
 | UC8 | Teaching | Instructor, student | Round 2 and 3, verification marks | A transparent example of AI reasoning under checks |
 | UC9 | Forecast quality | Quant, researcher | Calibration script | Reliability table and Brier score |
-| UC10 | Extend / evaluate | Developer, researcher | Tests, config, fixtures | A system you can change safely offline |
+| UC10 | Extend / evaluate | Developer, researcher | Live tests, prompts, config | A system you can change and re-measure on real data |
 | UC11 | Present | Founder, product owner | The whole dashboard | A demo that survives hard questions |
 
 ## What Kai is good at
@@ -65,13 +65,13 @@ This document explains **who Kai is for, what problems it solves, and how to use
 
 **Steps**
 1. Open the dashboard, type a ticker, pick the thresholds that match your appetite (Balanced is a sensible default), and press **Run analysis**.
-2. Watch the committee grid: Charlie (SEC financials), Delta (news), Gamma (valuation and risk) work in turn; Sigma judges last.
-3. Read the **verdict card**: the recommendation, the confidence (Buy/Sell only), the decision gates and the verified supporting points.
+2. Watch the committee grid: Charlie (SEC fundamentals), Delta (news), Gamma (valuation and risk) and Vega (catalysts and options) work in turn, each only in its own domain; Sigma judges last. The verdict card shows the market snapshot time every agent worked from.
+3. Read the **verdict card**: the recommendation and its confidence, the decision gates, the verified supporting points, and **What to watch**: what would turn the verdict into Buy or Sell, price levels, the next earnings date with the options-implied move, and past swings.
 4. Open **Quant report** and compare the fair-value range with the last price.
 5. Open **What each agent said** and click an evidence chip to see the source behind a number.
 
 **How to read it**
-- *Hold with no confidence* is a normal, informative result: it means the debate did not clear the Buy or Sell bar. The gates list which condition blocked it (for example "margin of safety −1.70 < +0.25").
+- *Hold* is a normal, informative result: the debate did not clear the Buy or Sell bar. Its confidence says how firmly: a high number means the debate sits well inside the Hold zone (or a gate missed by a wide margin, for example "margin of safety −1.70 < +0.25"); a low number means it is close to a trigger, so the "Would become Buy/Sell if" items matter.
 - *Faithfulness below 100%* means some stated numbers did not match the data. Expand that agent to see which claim failed and what the data says instead.
 
 **Caution:** a verdict summarises evidence at one moment. It does not account for events that have not happened yet.
@@ -101,7 +101,7 @@ This document explains **who Kai is for, what problems it solves, and how to use
 
 | What you see | What it means | What to do |
 |---|---|---|
-| **Hold, no confidence** | The debate score or a gate did not clear the Buy/Sell bar | Read the gates; try another threshold set (UC4) |
+| **Hold** (with a confidence in the Hold) | The debate score or a gate did not clear the Buy/Sell bar | Read the gates and the "Would become Buy/Sell if" suggestions; try another threshold set (UC4) |
 | **Verdict based on fewer agents** | An agent failed or was dropped; the verdict uses the rest | Expand the missing agent for its error or failed claims |
 | **Circuit breaker: too few agents passed the fact-check** | At least two agents stated numbers that did not match the data, so the debate stopped after round 1 | Read the failed claims; the data or the model output was unreliable |
 | **Not enough data to start a debate** | SEC, market or news data was unavailable for too many agents | Check the ticker and the network, then retry |
@@ -214,9 +214,9 @@ This script is live (network) and is not part of the automated tests.
 
 **Who:** engineers adding data sources or models, or researchers evaluating agent systems.
 
-- **Everything is testable offline.** About 240 backend tests run with recorded SEC, news and yfinance fixtures and a fake LLM; any unexpected network call fails the test.
-- **Inject a model.** The LLM client is injectable into every agent, the judge and the coordinator, so you can test behaviour with scripted replies, including deliberately wrong numbers (the suite does exactly this to prove the fact-check catches them).
-- **Swap providers or models.** Set `KAI_GROQ_MODEL` / `KAI_GEMINI_MODEL`, or extend `coordinator/llm_client.py`.
+- **Tested on real data with real models.** The suite runs complete live debates and re-derives every property independently (fact-check, score, confidence, snapshot consistency, lane rule, suggestion numbers). Results with all numbers: [TESTRESULTS.md](TESTRESULTS.md).
+- **Tune how agents argue.** Each agent's system prompt is a file in `prompts/`; shared rules (stay in your lane, cite evidence, comms protocol) are included from one place. Rerun the live suite to measure the effect.
+- **Swap providers or models.** Edit the per-agent model chains in `config/llm.yaml` (list what your keys can use with `python -m coordinator.llm_client --list`); the trace panel shows which model answered each step and where its tokens went.
 - **Tune behaviour in one file.** Thresholds, fact-check tolerance, circuit-breaker floors, CAPM constants and simulation sizes are in `config/thresholds.yaml`.
 - **Strict contracts.** Agent output, critiques, final positions, the quant report and Sigma's verdict are pydantic models; the frontend tests render against real API payloads, and a backend test fails if the API shape drifts from them.
 
@@ -240,25 +240,29 @@ This script is live (network) and is not part of the automated tests.
 - *"What stops the model making things up?"* Numbers and quotes are re-checked in code; qualitative risk statements are **not** checked.
 - *"Can it trade?"* No. Approval records a decision only.
 - *"Is it secure?"* It is a local single-user app with no authentication. It must not be exposed on a network as is.
-- Run one real analysis before presenting. Screens built from test fixtures contain placeholder agent text.
+- Run one real analysis before presenting; the live results in TESTRESULTS.md show what real output looks like.
 
 ---
 
 ## Worked example: AAPL
 
-The figures below come from the repository's **recorded AAPL data** (as of 2026-11-13) and are shown to illustrate how to read the output. They are not a recommendation. The agent wording in the test fixtures is placeholder text from a fake model, so this example uses only the computed, data-driven parts.
+From the live test run on 2026-11-14 (real models, real data; full record in [TESTRESULTS.md](TESTRESULTS.md)). It illustrates how to read the output; it is not a recommendation.
 
-**Fact-check (Charlie).** Charlie cites `sec:revenue:FY2026` and `sec:revenue:FY2025`. The SEC records give revenue of **$478.8B** and **$416.2B**, so a claim of "+15%" matches within the 1% tolerance and is marked *verified*. A claim of "$520B" would be marked *failed: value_mismatch* with the data's value shown beside it. (The test suite plants exactly that error to prove the check works.)
+**One snapshot.** Every agent worked from price **$356.27**, fetched 2026-11-14 05:07 UTC (last close 2026-11-13). P/E **39.67** = price ÷ trailing-twelve-month diluted EPS **$8.98** (2025-09-28 to 2026-09-26). Returns carry their windows: **+4.3%** over 1 month (2026-10-15 to 11-13), **+30.7%** over 1 year.
 
-**Quant report (descriptive).** Annualised volatility **24.9%** over 252 daily returns; maximum drawdown **−13.8%**; beta against the S&P 500 **1.07** (standard error 0.06, 500 observations); 1-day historical 95% VaR **2.0%**.
+**The committee (Zen thresholds).** Charlie (fundamentals) bullish 80 and Delta (news) bullish 85; Vega (catalysts) bearish 72.5, citing 23 downward against 7 upward EPS revisions in 30 days. Gamma (valuation) opened bearish 85 but ran out of its token share before round 3, so its round-1 view stands. Charlie's four claims were all re-computed and verified, for example "Revenue FY2026 equals $478.834 billion" against `sec:revenue:FY2026`.
 
-**Quant report (model).** CAPM discount rate **10.46%**. The Monte Carlo DCF (10,000 simulations) gives fair value per share of **$41 (p10) – $128 (median) – $327 (p90)** against a last price of **$354.88**, so **6%** of simulations put fair value above the price.
+**Verdict: Hold, 74% confidence in Hold.** The weighted debate score is **+0.01**, nowhere near Zen's buy trigger (+0.50) or sell trigger (−0.20), so the Hold is firm (conviction 0.98). Even a higher score would not buy: the margin of safety against the point DCF is **−1.73**, against Zen's required +0.25.
 
-**Quant report (prediction).** The probability that the price is higher after 63 trading days is **51.1%** (90% interval 46.4–54.8%) from a block bootstrap with the past trend removed. That is close to a coin flip by construction: with the trend removed, only the *shape* of past returns remains.
+**What to watch (computed).**
+- Would become Buy if the score reaches +0.50 **and** the price is at or below **$97.87**, a 25% margin of safety on the DCF value of $130.49.
+- The Monte Carlo fair-value range is **$41–$325** (median $127); the price is above the whole range, and only 6% of simulations put fair value above it.
+- The analyst mean target is $344.62, **−3.3%** from the snapshot price.
+- Earnings are in 77 days; options imply about a **±10.3%** move by the first expiry after them.
+- Over the past year, 1 day in 20 lost 2.0% or more; the worst fall was 13.8%; volatility was 25%.
+- The quant report disagrees with Charlie and Delta's bullish stances, so check that before acting.
 
-**Unavailable, on purpose.** The base rate reports "insufficient data: 7 similar cases out of 37; at least 30 needed" and the calibration score is unavailable until the backtest has been run. Kai shows the reason instead of a number.
-
-**What the judge does with it.** The point-estimate DCF puts the margin of safety at **−1.70**, below the Zen gate (+0.25), so no persona's Buy rule is satisfied on valuation grounds. If the agents were all bullish, the verdict card would show the contradiction with the 6% figure and a heavily reduced confidence.
+**Unavailable, on purpose.** Base rates (too few comparable cases) and calibration (no recorded forecasts yet) show the reason instead of a number.
 
 ---
 
@@ -267,8 +271,10 @@ The figures below come from the repository's **recorded AAPL data** (as of 2026-
 | Term | Meaning |
 |---|---|
 | **Verdict** | Buy, Hold, Sell or No Verdict, computed by rules from the debate and the persona's thresholds |
-| **Confidence** | Only for Buy/Sell: `100 × abs(score) × integrity × coverage × agreement × contradiction factor`; lowered, never raised, by the quant report |
-| **Debate score** | Average of stance × confidence × faithfulness over agents that passed the fact-check; −1 (bearish) to +1 (bullish) |
+| **Confidence** | Buy/Sell: `100 × abs(score) × integrity × coverage × agreement × contradiction factor` (lowered, never raised, by the quant report). Hold: `100 × hold conviction × integrity × coverage` |
+| **Hold conviction** | How firmly a Hold is a Hold: distance from the score to the nearer Buy/Sell trigger, or how far a blocking gate missed; 0 = on the edge, 1 = firm |
+| **Suggestions / What to watch** | Conditions, levels, events and risks computed from the evidence (`judge/playbook.py`); research, not advice |
+| **Debate score** | Weighted average (judge's domain weights) of stance × confidence × faithfulness over agents that passed the fact-check; −1 (bearish) to +1 (bullish) |
 | **Faithfulness** | Share of an agent's checkable claims that match the fetched data |
 | **Integrity** | How well critiques were answered and failed claims corrected |
 | **Circuit breaker** | After round 1, agents under 60% faithfulness are dropped; with fewer than two left the debate ends with No Verdict |
@@ -296,7 +302,7 @@ The figures below come from the repository's **recorded AAPL data** (as of 2026-
 
 **Does the AI decide the verdict?** No. A language model argues and writes the explanation. The verdict, scores and confidence are computed in code, and a test confirms a model reply saying "strong sell" cannot change a computed Buy.
 
-**Why do I sometimes get no confidence number?** Only Buy and Sell carry a confidence. A Hold, or a No Verdict, deliberately shows none.
+**Why does a Hold have a confidence?** It tells you how firmly the debate sits inside the Hold zone. A Hold at 90% is a settled "not now"; a Hold at 15% is close to flipping, so watch the triggers. Only No Verdict carries no confidence.
 
 **Why was my confidence lowered?** The quant report disagreed with the agents (its probabilities point against the verdict) or contradicted individual agents' stances. The verdict card shows both factors.
 

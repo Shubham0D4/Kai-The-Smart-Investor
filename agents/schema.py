@@ -3,7 +3,8 @@ Agent output schema (DESIGN.md §2) and the structured-generation helper every a
 
 An agent turn is a JSON object with a stance, a confidence and a list of claims. Every
 checkable claim points at evidence records (IDs like ``sec:revenue:FY2026``) that the agent
-was given. The model's reply is validated here; one retry is allowed, then the agent fails.
+was given. The model's reply is constrained by a JSON schema and validated here; one
+repair is allowed, then the agent fails.
 """
 
 import json
@@ -29,6 +30,11 @@ class EvidenceRecord(BaseModel):
 
 # --------------------------------------------------------------------------- claims
 
+# Claim ids are C1..C15 in every round. Refs to another agent's claim add the agent: "delta.C2".
+MAX_CLAIMS = 15
+CLAIM_IDS = [f"C{i}" for i in range(1, MAX_CLAIMS + 1)]
+CLAIM_ID = Field(pattern=r"^C([1-9]|1[0-5])$")
+
 class NumericClaim(BaseModel):
     """A number derived from one or two evidence records.
 
@@ -38,7 +44,7 @@ class NumericClaim(BaseModel):
       ratio:  value == e0 / e1
       diff:   value == e0 - e1
     """
-    id: str
+    id: str = CLAIM_ID
     kind: Literal["numeric"]
     text: str
     value: float
@@ -56,7 +62,7 @@ class NumericClaim(BaseModel):
 
 class QuoteClaim(BaseModel):
     """A verbatim span from one article."""
-    id: str
+    id: str = CLAIM_ID
     kind: Literal["quote"]
     text: str
     quote: str = Field(min_length=3)
@@ -65,7 +71,7 @@ class QuoteClaim(BaseModel):
 
 class InferenceClaim(BaseModel):
     """A conclusion resting on other claims in the same output."""
-    id: str
+    id: str = CLAIM_ID
     kind: Literal["inference"]
     text: str
     based_on: List[str] = Field(min_length=1)
@@ -73,7 +79,7 @@ class InferenceClaim(BaseModel):
 
 Claim = Annotated[Union[NumericClaim, QuoteClaim, InferenceClaim], Field(discriminator="kind")]
 
-AgentName = Literal["charlie", "delta", "gamma"]
+AgentName = Literal["charlie", "delta", "gamma", "vega"]
 
 
 class AgentOutput(BaseModel):
@@ -112,7 +118,7 @@ Stance = Literal["bullish", "neutral", "bearish"]
 class Critique(BaseModel):
     """Round 2: challenge or confirm one claim of another agent, backed by own evidence."""
     id: str = Field(pattern=r"^K\d+$")
-    target: str = Field(pattern=r"^(charlie|delta|gamma)\.[A-Za-z0-9_]+$")   # "<agent>.<claim id>"
+    target: str = Field(pattern=r"^(charlie|delta|gamma|vega)\.[A-Za-z0-9_]+$")   # "<agent>.<claim id>"
     verdict: Verdict
     argument: str = Field(min_length=1)
     evidence: List[str] = Field(min_length=1)
@@ -161,30 +167,23 @@ class FinalOutput(AgentOutput):
 
 
 # --------------------------------------------------------------------------- prompting
+#
+# Kai wire protocol: data is sent in a compact line format and replies are JSON constrained by a
+# schema. Measured on a real TSLA debate, the old evidence format cost 3,956 tokens for Charlie's
+# 51 records; this one costs about a fifth of that, with values kept exact (no rounding).
 
 SCHEMA_INSTRUCTIONS = """
-Return ONLY a JSON object, no prose and no code fences, with exactly this shape:
-{{
-  "agent": "{agent}", "round": {round},
-  "stance": "bullish" | "neutral" | "bearish",
-  "confidence": <number 0-100>,
-  "claims": [
-    {{"id": "C1", "kind": "numeric", "text": "<plain-English claim>", "value": <number>, "unit": "<USD|ratio|percent|...>",
-      "op": "equals" | "growth" | "ratio" | "diff", "evidence": ["<evidence id>", ...]}},
-    {{"id": "C2", "kind": "quote", "text": "<claim>", "quote": "<verbatim span from the article>", "evidence": ["<news id>"]}},
-    {{"id": "C3", "kind": "inference", "text": "<conclusion>", "based_on": ["C1", "C2"]}}
-  ],
-  "risks": ["<risk>", ...]
-}}
-Rules:
-- Use ONLY the evidence listed above. Do not use outside knowledge, memory or assumptions about
-  the company. If the evidence does not support a point, do not make it.
-- Every evidence id you cite must appear in the evidence list exactly as written.
-- numeric ops: equals -> value of evidence[0]; growth -> evidence[0]/evidence[1] - 1 (newer first);
-  ratio -> evidence[0]/evidence[1]; diff -> evidence[0] - evidence[1]. "equals" takes one id, the others two.
-- quote claims copy a span verbatim from the cited article's title or summary.
-- inference claims cite other claim ids in based_on, never evidence ids.
-- Make at least 3 numeric or quote claims.
+Return ONLY a JSON object (the schema is enforced):
+{{"agent": "{agent}", "round": {round}, "stance": "bullish"|"neutral"|"bearish", "confidence": 0-100,
+ "claims": [
+  {{"id": "C1", "kind": "numeric", "text": "<claim>", "value": <number>, "unit": "<USD|percent|ratio|x|...>", "op": "equals"|"growth"|"ratio"|"diff", "evidence": ["<id>"]}},
+  {{"id": "C2", "kind": "quote", "text": "<claim>", "quote": "<verbatim span>", "evidence": ["<news id>"]}},
+  {{"id": "C3", "kind": "inference", "text": "<conclusion>", "based_on": ["C1", "C2"]}}],
+ "risks": ["<risk>"]}}
+ops: equals = e0 (one id); growth = e0/e1 - 1 (newer first); ratio = e0/e1; diff = e0 - e1.
+quote: copy a span verbatim from the cited article's title or summary.
+Claim ids are C1, C2, ... (at most C15); inference based_on lists those ids, never evidence ids.
+Use only the evidence above, no outside knowledge. At least 3 numeric or quote claims.
 """
 
 
@@ -193,26 +192,116 @@ def schema_instructions(agent: str, round_number: int) -> str:
 
 
 def _fmt(v: float) -> str:
-    """Full digits for large amounts (no scientific notation), 6 significant digits otherwise."""
-    return f"{v:,.0f}" if abs(v) >= 1000 else f"{v:.6g}"
+    """Exact digits for large amounts (no separators, no scientific notation), 6 significant
+    digits otherwise."""
+    return f"{v:.0f}" if abs(v) >= 1000 else f"{v:.6g}"
+
+
+EVIDENCE_LEGEND = ("Format: [id] value unit | note | date range. Prefixes: sec = SEC 10-K/10-Q XBRL "
+                   "(FY = fiscal year, TTM = trailing 12 months), mkt = market data, cat = catalysts and "
+                   "analysts, calc / quant / assumption = computed in code, news = [id] date | title | "
+                   "summary. Values are exact. A change or return is only comparable with one over the "
+                   "same date range.")
 
 
 def format_evidence(records: Iterable[EvidenceRecord]) -> str:
-    """One line per record: [id] label: value unit (period) and, for articles, the summary."""
+    """One compact line per record. Numbers: '[id] value unit', plus the label when the id does
+    not already say what it is (SEC fiscal-year ids do) and the date range for anything that is
+    not a fiscal-year figure. Articles: '[id] date | title | summary'."""
     lines = []
     for r in records:
-        parts = [f"[{r.id}] {r.label}"]
         if r.value is not None:
-            parts.append(f": {_fmt(r.value)} {r.unit or ''}".rstrip())
-        if r.period:
-            parts.append(f" ({r.period})")
-        if r.source:
-            parts.append(f" | source: {r.source}")
-        line = "".join(parts)
-        if r.text:
-            line += f"\n    summary: {r.text}"
+            line = f"[{r.id}] {_fmt(r.value)}" + (f" {r.unit}" if r.unit else "")
+            fiscal = r.id.startswith("sec:") and ":FY" in r.id
+            if not fiscal or "split-adjusted" in r.label:
+                line += f" | {r.label}"
+            if r.period and not fiscal:
+                line += f" | {r.period}"
+        else:
+            date = (r.period or "")[:10]
+            line = f"[{r.id}] {date} | {r.label}" + (f" | {r.text}" if r.text else "")
         lines.append(line)
     return "\n".join(lines)
+
+
+def evidence_block(records: Iterable[EvidenceRecord]) -> str:
+    """The evidence section every round's prompt starts with. It is identical across an
+    agent's three calls, so providers that cache prompt prefixes can reuse it."""
+    return f"## Your evidence (the only ids you may cite)\n{EVIDENCE_LEGEND}\n{format_evidence(records)}"
+
+
+def compact_json(model: BaseModel) -> str:
+    return json.dumps(model.model_dump(by_alias=True), separators=(",", ":"), ensure_ascii=False)
+
+
+# JSON schemas sent to the provider. Strict mode needs every property listed in "required" and
+# additionalProperties false at every level. Enums carry the ids an agent may use, so citing an
+# id it was not given is impossible rather than retried.
+
+def _obj(props: Dict[str, Dict]) -> Dict:
+    return {"type": "object", "additionalProperties": False, "required": list(props), "properties": props}
+
+
+def _str(enum: Optional[List[str]] = None) -> Dict:
+    return {"type": "string", "enum": list(enum)} if enum else {"type": "string"}
+
+
+def _arr(items: Dict, min_items: int = 0, max_items: Optional[int] = None) -> Dict:
+    out = {"type": "array", "items": items}
+    if min_items:
+        out["minItems"] = min_items
+    if max_items:
+        out["maxItems"] = max_items
+    return out
+
+
+def claim_json_schema(evidence: Iterable[EvidenceRecord]) -> Dict:
+    evidence = list(evidence)
+    numeric_ids = [e.id for e in evidence if e.value is not None]
+    text_ids = [e.id for e in evidence if e.value is None]
+    variants = [_obj({"id": _str(CLAIM_IDS), "kind": _str(["inference"]), "text": _str(),
+                      "based_on": _arr(_str(CLAIM_IDS), 1)})]
+    if numeric_ids:
+        variants.insert(0, _obj({
+            "id": _str(CLAIM_IDS), "kind": _str(["numeric"]), "text": _str(), "value": {"type": "number"},
+            "unit": _str(), "op": _str(["equals", "growth", "ratio", "diff"]),
+            "evidence": _arr(_str(numeric_ids), 1, 2)}))
+    if text_ids:
+        variants.insert(1, _obj({"id": _str(CLAIM_IDS), "kind": _str(["quote"]), "text": _str(), "quote": _str(),
+                                 "evidence": _arr(_str(text_ids), 1, 1)}))
+    return {"anyOf": variants}
+
+
+def _output_props(agent: str, round_number: int, evidence: Iterable[EvidenceRecord]) -> Dict[str, Dict]:
+    return {
+        "agent": _str([agent]), "round": {"type": "integer", "enum": [round_number]},
+        "stance": _str(["bullish", "neutral", "bearish"]), "confidence": {"type": "number"},
+        "claims": _arr(claim_json_schema(evidence), 1), "risks": _arr(_str()),
+    }
+
+
+def output_json_schema(agent: str, round_number: int, evidence: Iterable[EvidenceRecord]) -> Dict:
+    """Schema of a round-1 reply (AgentOutput)."""
+    return _obj(_output_props(agent, round_number, evidence))
+
+
+def critique_json_schema(agent: str, targets: List[str], own_ids: List[str]) -> Dict:
+    """Schema of a round-2 reply (CritiqueOutput)."""
+    critique = _obj({"id": _str(), "target": _str(targets), "verdict": _str(["dispute", "qualify", "support"]),
+                     "argument": _str(), "evidence": _arr(_str(own_ids), 1)})
+    return _obj({"agent": _str([agent]), "round": {"type": "integer", "enum": [2]}, "critiques": _arr(critique, 1)})
+
+
+def final_json_schema(agent: str, evidence: Iterable[EvidenceRecord], own_claims: List[str],
+                      received: List[str], refs: List[str], round1_stance: str) -> Dict:
+    """Schema of a round-3 reply (FinalOutput)."""
+    props = _output_props(agent, 3, evidence)
+    props["changes"] = _arr(_obj({"claim": _str(own_claims), "action": _str(["kept", "revised", "withdrawn"]),
+                                  "reason": _str(), "in_response_to": _arr(_str(received))}))
+    props["changed_by"] = _arr(_obj({"ref": _str(refs), "reason": _str()}))
+    props["stance_change"] = _obj({"from": _str([round1_stance]), "to": _str(["bullish", "neutral", "bearish"]),
+                                   "reason": _str()})
+    return _obj(props)
 
 
 # --------------------------------------------------------------------------- parsing
@@ -264,13 +353,18 @@ def validate_output(
 class StructuredResult:
     output: Optional[BaseModel]
     error: Optional[str]
-    error_type: Optional[str]           # "llm" | "invalid_output"
+    error_type: Optional[str]           # "llm" | "invalid_output" | "budget"
     attempts: int
     token_usage: Dict[str, int] = field(default_factory=dict)
+    models: List[str] = field(default_factory=list)     # "provider:model" per attempt
+    repaired_from: Optional[str] = None  # why the first reply was rejected, when a repair succeeded
 
     @property
     def ok(self) -> bool:
         return self.output is not None
+
+
+USAGE_KEYS = ("prompt_tokens", "candidates_tokens", "reasoning_tokens", "cached_tokens", "total_tokens")
 
 
 def _usage(response) -> Dict[str, int]:
@@ -278,43 +372,94 @@ def _usage(response) -> Dict[str, int]:
     return {
         "prompt_tokens": getattr(meta, "prompt_token_count", 0) or 0,
         "candidates_tokens": getattr(meta, "candidates_token_count", 0) or 0,
+        "reasoning_tokens": getattr(meta, "thoughts_token_count", 0) or 0,
+        "cached_tokens": getattr(meta, "cached_content_token_count", 0) or 0,
         "total_tokens": getattr(meta, "total_token_count", 0) or 0,
     }
 
 
-def generate_validated(model, prompt: str, validate: Callable[[str], BaseModel]) -> StructuredResult:
-    """Call the model, validate the reply, retry once on invalid output, then fail cleanly.
-    Token usage is summed over every attempt, including rejected ones."""
-    usage = {"prompt_tokens": 0, "candidates_tokens": 0, "total_tokens": 0}
+def _repair_prompt(prompt: str, reply: str, error: str, hint: str) -> str:
+    """What to send after a rejected reply. A reply that is valid JSON but breaks a rule gets a
+    short repair request (the reply, the error and the allowed values), not the whole prompt
+    again: on a real debate the full resend made one failed round-3 call cost 37k tokens.
+    A reply that is not JSON at all has nothing to repair, so the full prompt is resent."""
+    try:
+        extract_json(reply)
+    except (ValueError, json.JSONDecodeError):
+        return (f"{prompt}\n\nYour previous reply was rejected: {error}\n"
+                "Reply again with ONLY the JSON object.")
+    return (f"REPAIR. Your JSON reply was rejected: {error}\n"
+            + (f"{hint}\n" if hint else "")
+            + f"Your reply:\n{reply[:6000]}\n"
+            "Fix only what the error names and keep everything else. Return ONLY the corrected JSON object.")
+
+
+def generate_validated(model, prompt: str, validate: Callable[[str], BaseModel], *,
+                       schema: Optional[Dict] = None, schema_name: str = "reply",
+                       max_output_tokens: Optional[int] = None, repair_hint: str = "",
+                       budget_left: Optional[Callable[[], int]] = None) -> StructuredResult:
+    """Call the model, validate the reply, repair once on invalid output, then fail cleanly.
+
+    schema: JSON schema the provider enforces (strict mode); max_output_tokens caps each call.
+    budget_left(): tokens this agent may still spend. Before every attempt the prompt is
+    estimated and the output cap is lowered to what remains, so a call can never overspend;
+    if not even a third of the normal cap is left, the step is skipped with error_type "budget".
+    Token usage is summed over every attempt."""
+    usage = {k: 0 for k in USAGE_KEYS}
+    models: List[str] = []
+    schema_text = json.dumps(schema) if schema else ""
     current_prompt = prompt
-    last_error = None
+    first_error = last_error = None
     for attempt in (1, 2):
+        cap = max_output_tokens
+        if budget_left is not None and max_output_tokens:
+            room = budget_left() - _estimate(model, current_prompt + schema_text)
+            if room < max_output_tokens // 3:
+                why = "this agent's token share is used up" if attempt == 1 else "no token budget left to repair the reply"
+                err = f"token budget: {why} (~{max(room, 0)} tokens of room, {max_output_tokens // 3} needed)"
+                if last_error:
+                    err += f"; rejected reply: {last_error}"
+                return StructuredResult(None, err, "budget", attempt - 1, usage, models)
+            cap = min(max_output_tokens, room)
         try:
-            response = model.generate_content(current_prompt)
-        except Exception as e:  # provider failure: no retry here, MultiLLMClient already retries
-            return StructuredResult(None, f"LLM call failed: {e}", "llm", attempt, usage)
+            response = model.generate_content(current_prompt, schema=schema, schema_name=schema_name,
+                                              max_output_tokens=cap)
+        except Exception as e:  # every model in the chain failed: no retry here
+            return StructuredResult(None, f"LLM call failed: {e}", "llm", attempt, usage, models)
         for k, v in _usage(response).items():
             usage[k] += v
+        models.append(getattr(response, "model", None) or "unknown")
         text = getattr(response, "text", "") or ""
         try:
-            return StructuredResult(validate(text), None, None, attempt, usage)
+            return StructuredResult(validate(text), None, None, attempt, usage, models, first_error)
         except ValueError as e:
             last_error = str(e)
-            current_prompt = (
-                f"{prompt}\n\nYour previous reply was rejected: {last_error}\n"
-                f"Previous reply:\n{text[:4000]}\n\n"
-                "Reply again with ONLY the corrected JSON object."
-            )
-    return StructuredResult(None, f"invalid output after 2 attempts: {last_error}", "invalid_output", 2, usage)
+            first_error = first_error or last_error
+            if attempt == 2:
+                break
+            current_prompt = _repair_prompt(prompt, text, last_error, repair_hint)
+    detail = last_error if last_error == first_error else f"{last_error} (first reply: {first_error})"
+    return StructuredResult(None, f"invalid output after 2 attempts: {detail}", "invalid_output", 2, usage, models)
+
+
+def _estimate(model, text: str) -> int:
+    est = getattr(model, "estimate_tokens", None)
+    return est(text) if callable(est) else int(len(text) / 2.5) + 1
 
 
 def generate_agent_output(
-    model, prompt: str, *, agent: str, round_number: int, evidence_ids: Iterable[str]
+    model, prompt: str, *, agent: str, round_number: int, evidence: Iterable[EvidenceRecord],
+    max_output_tokens: Optional[int] = None, budget_left: Optional[Callable[[], int]] = None,
 ) -> StructuredResult:
-    """Round-1 generation: an AgentOutput citing only the given evidence ids."""
-    evidence_ids = list(evidence_ids)
-    return generate_validated(model, prompt, lambda text: validate_output(
-        text, agent=agent, round_number=round_number, evidence_ids=evidence_ids))
+    """Round-1 generation: an AgentOutput citing only the given evidence (enforced by the schema)."""
+    evidence = list(evidence)
+    evidence_ids = [e.id for e in evidence]
+    return generate_validated(
+        model, prompt,
+        lambda text: validate_output(text, agent=agent, round_number=round_number, evidence_ids=evidence_ids),
+        schema=output_json_schema(agent, round_number, evidence), schema_name=f"{agent}_round{round_number}",
+        max_output_tokens=max_output_tokens, budget_left=budget_left,
+    )
 
 
 def render_output(out: AgentOutput) -> str:
@@ -357,7 +502,7 @@ def agent_error(agent: str, ticker: str, error: str, error_type: str, **extra) -
         "agent": agent.capitalize(),
         "ticker": ticker,
         "error": error,
-        "error_type": error_type,   # "data_source" | "llm" | "invalid_output"
+        "error_type": error_type,   # "data_source" | "llm" | "invalid_output" | "budget"
         "analysis": None,
         **extra,
     }

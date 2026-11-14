@@ -10,8 +10,9 @@ import SessionBanner from './SessionBanner';
 import SigmaCard from './SigmaCard';
 import TraceDashboard from './TraceDashboard';
 
-/** Price the quant report's fair-value range is compared with: Gamma's fetched last price. */
-const reportPrice = (debate) => debate?.agents?.gamma?.evidence?.find((e) => e.id === 'mkt:price')?.value;
+/** Price the quant report's fair-value range is compared with: the debate's market snapshot. */
+const reportPrice = (debate) => debate?.market_snapshot?.price
+    ?? debate?.agents?.gamma?.evidence?.find((e) => e.id === 'mkt:price')?.value;
 
 /**
  * Everything about the active session, top to bottom: state, committee, verdict, quant report,

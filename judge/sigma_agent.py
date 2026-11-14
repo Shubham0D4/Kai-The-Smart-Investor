@@ -8,8 +8,11 @@ Sigma computes everything in code from the saved debate transcript:
 It also receives the quant report (quant/, DESIGN.md §10) as a separate structured input: the
 volatility gate reads it, `quant:` claims are verified against it, and it lowers a Buy/Sell
 confidence (agreement Q, contradictions C) without ever changing the recommendation.
+It also computes a playbook of suggestions (judge/playbook.py): what would turn the verdict into
+Buy or Sell, price levels, upcoming events and risk, every number from the evidence.
 Its result is a pydantic-validated object (SigmaEvaluation). The LLM is called once, only to
-write a plain-language explanation of the verdict; its reply is never parsed for a verdict.
+write a plain-language explanation of the verdict and the playbook; its reply is never parsed
+for a verdict.
 """
 
 import os
@@ -27,6 +30,7 @@ from coordinator.config import Thresholds, load_thresholds
 from coordinator.personas import get_sigma_system_instruction
 from coordinator.transcript import Transcript
 from coordinator.llm_client import MultiLLMClient
+from judge.playbook import Suggestion, build_playbook
 from judge.scoring import (
     AgentIntegrity, Contradiction, Gate, Verdict, agent_integrity, apply_quant, collect_key_risks,
     collect_supporting_points, decide_verdict, no_verdict, overall_integrity, quant_signals,
@@ -65,16 +69,19 @@ class FinalRecommendation(BaseModel):
     contradiction_factor: Optional[float] = None
     quant_signals: Dict[str, float] = {}
     contradictions: List[Contradiction] = []
+    hold_conviction: Optional[float] = None
+    coverage: Optional[float] = None
+    suggestions: List[Suggestion] = []
 
     @model_validator(mode="after")
-    def _confidence_only_for_actions(self):
-        actionable = self.recommendation in ("Buy", "Sell")
-        if actionable and self.confidence is None:
+    def _confidence_for_every_verdict(self):
+        if self.recommendation == "No Verdict":
+            if self.confidence is not None:
+                raise ValueError("No Verdict carries no confidence")
+            if not self.reason:
+                raise ValueError("No Verdict needs a reason")
+        elif self.confidence is None:
             raise ValueError(f"{self.recommendation} needs a confidence")
-        if not actionable and self.confidence is not None:
-            raise ValueError(f"{self.recommendation} carries no confidence")
-        if self.recommendation == "No Verdict" and not self.reason:
-            raise ValueError("No Verdict needs a reason")
         return self
 
 
@@ -102,7 +109,7 @@ class SigmaAgent:
         self.role = "Final Decision Judge"
         self.thresholds = thresholds
         self.model = llm_client if llm_client is not None else MultiLLMClient(
-            system_instruction=get_sigma_system_instruction())
+            system_instruction=get_sigma_system_instruction(), role="sigma")
 
     @property
     def cfg(self) -> Thresholds:
@@ -169,9 +176,13 @@ class SigmaAgent:
             return apply_quant(v, sc["finals"], signals, signal_warnings, cfg.quant)
 
         verdict = verdict_for(persona_name)
+        by_persona = {p: verdict_for(p) for p in PERSONAS}
+        evidence = {e.id: e.value for ev in transcript.evidence.values() for e in ev if e.value is not None}
+        playbook = build_playbook(verdict, persona_name, cfg.persona(persona_name), evidence, quant_report,
+                                  by_persona)
         supporting = collect_supporting_points(sc["finals"], sc["verifications"], verdict)
         risks = collect_key_risks(sc["finals"])
-        analysis, narrative_warning = self.write_narrative(verdict, transcript, supporting, risks)
+        analysis, narrative_warning = self.write_narrative(verdict, transcript, supporting, risks, playbook)
         all_warnings = verdict.warnings + ([narrative_warning] if narrative_warning else [])
 
         faith, integ = round(sc["faithfulness"] * 100, 2), round(sc["integrity"] * 100, 2)
@@ -189,10 +200,11 @@ class SigmaAgent:
                 confidence_before_quant=verdict.confidence_before_quant,
                 quant_agreement=verdict.quant_agreement, contradiction_factor=verdict.contradiction_factor,
                 quant_signals=verdict.quant_signals, contradictions=verdict.contradictions,
+                hold_conviction=verdict.hold_conviction, coverage=verdict.coverage, suggestions=playbook,
             ),
             verification=sc["verifications"],
             integrity=sc["integrity_by_agent"],
-            verdicts_by_persona={p: verdict_for(p) for p in PERSONAS},
+            verdicts_by_persona=by_persona,
             quant_report=quant_report,
             metadata={
                 "rounds_evaluated": len(log.get("rounds", [])),
@@ -202,23 +214,25 @@ class SigmaAgent:
         )
         return result.model_dump(mode="json")
 
-    def write_narrative(self, verdict: Verdict, transcript: Transcript,
-                        supporting: List[str], risks: List[str]) -> Tuple[str, Optional[str]]:
+    def write_narrative(self, verdict: Verdict, transcript: Transcript, supporting: List[str],
+                        risks: List[str], playbook: Optional[List[Suggestion]] = None) -> Tuple[str, Optional[str]]:
         """The only LLM call: explain the computed verdict. Returns (text, warning or None).
         Falls back to a fixed template when there is no verdict to explain or the call fails."""
         template = self._template(verdict, supporting, risks)
         if verdict.recommendation == "No Verdict":
             return template, None
-        conf = f"{verdict.confidence:.0f}" if verdict.confidence is not None else "none (Hold)"
+        conf = f"{verdict.confidence:.0f}" + (" (confidence in Hold)" if verdict.recommendation == "Hold" else "")
         prompt = f"""
-Explain this investment committee verdict for {transcript.ticker} in 2-3 short paragraphs.
-The verdict and confidence were computed in code and are final: do not change, soften or
-contradict them, and do not recommend anything else.
+Explain this investment committee verdict for {transcript.ticker} in at most 200 words, then
+say what an investor should watch, using the playbook below. The verdict, confidence and every
+number in the playbook were computed in code and are final: do not change, soften or contradict
+them, do not add any number that is not given here, and do not recommend anything else.
 
 Verdict: {verdict.recommendation}
 Confidence: {conf}
 Debate score S: {verdict.score:+.2f}
-Gates: {'; '.join(g.note for g in verdict.gates)}
+Gates (computed; state them exactly as PASSED or FAILED here):
+{chr(10).join(('- PASSED: ' if g.passed else '- FAILED: ') + g.note for g in verdict.gates)}
 Quant report adjustment: agreement Q = {verdict.quant_agreement}, contradiction factor C = {verdict.contradiction_factor}
 Contradictions with the quant report: {'; '.join(f"{x.agent} is {x.stance} but {x.field} = {x.value:.2f}" for x in verdict.contradictions) or 'none'}
 Agents counted: {', '.join(verdict.agents_valid)}; missing or excluded: {', '.join(verdict.agents_missing) or 'none'}
@@ -226,9 +240,14 @@ Verified supporting points:
 {chr(10).join('- ' + p for p in supporting) or '- none'}
 Risks raised by the agents:
 {chr(10).join('- ' + r for r in risks) or '- none'}
+Playbook (computed):
+{chr(10).join(f'- {x.title}: {x.detail}' for x in (playbook or [])) or '- none'}
 """
         try:
-            text = (self.model.generate_content(prompt).text or "").strip()
+            from coordinator.llm_config import load_llm_config
+            response = self.model.generate_content(
+                prompt, max_output_tokens=load_llm_config().max_output_tokens.narrative)
+            text = (response.text or "").strip()
         except Exception as e:
             return template, f"narrative unavailable (LLM call failed: {e}); template used"
         if not text:
@@ -239,7 +258,7 @@ Risks raised by the agents:
     def _template(verdict: Verdict, supporting: List[str], risks: List[str]) -> str:
         if verdict.recommendation == "No Verdict":
             return f"No verdict: {verdict.reason}."
-        conf = f"confidence {verdict.confidence:.0f}" if verdict.confidence is not None else "no confidence (Hold)"
+        conf = f"confidence {verdict.confidence:.0f}" if verdict.confidence is not None else "no confidence"
         lines = [f"Verdict: {verdict.recommendation}, {conf}, debate score {verdict.score:+.2f}.",
                  "Gates: " + "; ".join(g.note for g in verdict.gates) + "."]
         if supporting:

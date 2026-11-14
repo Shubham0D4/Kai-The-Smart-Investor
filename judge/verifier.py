@@ -104,6 +104,8 @@ def extract_quantities(text: str) -> List[Quantity]:
         if not cur and not suf:
             continue
         raw = m.group("num").replace(",", "").replace("−", "-")
+        if suf == "m" and not cur and "." not in raw and len(raw.lstrip("-")) <= 2:
+            continue    # "1m", "3m", "12m": a time window (1-month return), not 1 million
         try:
             num = float(raw)
         except ValueError:

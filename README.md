@@ -35,9 +35,9 @@ Most "AI stock analysis" tools hand you a paragraph and a rating, with no way to
 | Common problem | What Kai does instead |
 |---|---|
 | The model quotes numbers from memory | Every figure an agent states must cite an evidence record, and is **re-computed in code** from the fetched data (1% tolerance). Numbers in a claim's wording are checked too. |
-| A single model, a single opinion | Three specialists with different data (Charlie: SEC financials, Delta: news, Gamma: valuation and risk) state claims, challenge each other's claims **by id**, then revise. |
+| A single model, a single opinion | Four specialists, each on its own model and locked into its own domain (Charlie: SEC fundamentals, Delta: news, Gamma: valuation and risk, Vega: catalysts and options), state claims, challenge each other's claims **by id**, then revise. The judge, not the agents, weighs the domains. |
 | "Confidence" is whatever the model says | Confidence is a formula over the debate score, fact-check results, debate integrity and a quantitative report. |
-| The verdict is a paragraph | The verdict is computed from stances, verified claims and persona thresholds. The model's explanation cannot change it. |
+| The verdict is a paragraph | The verdict is computed from stances, verified claims and persona thresholds, and comes with computed suggestions: what would turn it into Buy or Sell, price levels, upcoming events and risk. The model's explanation cannot change any of it. |
 | Failures are hidden | If data is missing, an agent fails, or the fact-check breaks the debate, Kai says **No Verdict** with the reason. It never falls back to the model's own knowledge. |
 | Black-box output | Every claim, critique, change of mind, gate and statistic is shown, with its source and sample size. A signed record of the result is stored. |
 
@@ -49,20 +49,21 @@ flowchart TD
     UI -->|REST, polling| GW[FastAPI gateway<br/>thread pool, SQLite]
     GW --> CO[Debate coordinator]
 
-    subgraph FETCH["1 · Fetch once, in code, before any model runs"]
-      SEC[SEC EDGAR XBRL<br/>5 fiscal years]
-      MKT[yfinance<br/>price, 10y history, benchmarks]
+    subgraph FETCH["1 · One market snapshot, fetched in code before any model runs"]
+      MKT[yfinance<br/>price, dated return windows, splits]
+      SEC[SEC EDGAR XBRL<br/>5 fiscal years + TTM, split-adjusted]
       NEWS[4 news feeds<br/>merged, majority vote]
+      CAT[Catalysts<br/>earnings, analysts, options]
     end
     CO --> FETCH
     FETCH --> Q[2 · Quant report<br/>pure statistics, no LLM]
 
-    Q --> R1[3 · Round 1<br/>Charlie · Delta · Gamma<br/>independent claims with evidence]
+    Q --> R1[3 · Round 1<br/>Charlie · Delta · Gamma · Vega<br/>independent claims, each in its lane]
     R1 --> CB{4 · Fact-check<br/>faithfulness ≥ 0.60?}
     CB -->|fewer than 2 agents pass| NV[No Verdict<br/>with reason]
     CB -->|ok| R2[5 · Round 2<br/>challenge claims by id]
     R2 --> R3[6 · Round 3<br/>final stance + what changed and why]
-    R3 --> S[7 · Sigma, the judge<br/>computes scores and verdict]
+    R3 --> S[7 · Sigma, the judge<br/>weighs domains, computes verdict,<br/>confidence and suggestions]
     Q --> S
     S --> AP[Signed alpha packet]
     S --> H{Buy/Sell ≥ 60<br/>confidence?}
@@ -70,19 +71,20 @@ flowchart TD
     H -->|no| N[Notification / warning]
 ```
 
-1. **Fetch.** SEC financial statements, market data and news are fetched once, by code. Agents receive them as numbered evidence records (for example `sec:revenue:FY2026`); they do not call tools themselves.
+1. **Fetch, from one snapshot.** Market data is fetched first and its time recorded; SEC statements follow, with trailing-twelve-month (TTM) figures and per-share values put on today's share basis using the split history; news and catalysts (next earnings, analyst targets and revisions, options-implied volatility) are priced off the same snapshot. Agents receive numbered evidence records (for example `sec:revenue:FY2026`, `mkt:return_1m` with its exact date range); they do not call tools themselves.
 2. **Quant report.** A deterministic statistics module builds a report (volatility, beta, Monte Carlo DCF, forward probabilities, and more) before round 1.
-3. **Round 1.** Each agent returns validated JSON: a stance, a confidence, and claims. Every claim cites evidence.
+3. **Round 1.** Each agent returns validated JSON, in its own domain only: a stance, a confidence, and claims. Every claim cites evidence.
 4. **Circuit breaker.** Every claim is re-checked against the data. An agent below 60% faithfulness is dropped; with fewer than two agents left the debate ends with *No Verdict*.
-5. **Round 2.** Each agent challenges or confirms specific claims of the others by id (`charlie.C2`), citing evidence from its own data.
-6. **Round 3.** Each agent gives a final stance and states which claims or critiques changed its mind and why. Every critique it received must be answered.
-7. **Judge.** Sigma scores the debate and applies the persona's thresholds. One model call writes the explanation afterwards.
+5. **Round 2.** Each agent challenges or confirms specific claims of the others by id (`charlie.C2`), citing evidence from its own data. A dispute that compares returns over different windows (1 month against 1 year) is rejected in code.
+6. **Round 3.** Each agent gives a final stance and answers every critique it received. It may change its stance only when its own claims were disputed with data or failed the fact-check, never because another domain points the other way (that would count that evidence twice).
+7. **Judge.** Sigma weighs the four domains, applies the persona's thresholds, computes the confidence (Hold included) and a playbook of suggestions. One model call writes the explanation afterwards.
 
-A full analysis makes roughly ten model calls (nine agent calls plus the explanation, plus retries when a reply is invalid), under a hard budget of 50,000 tokens across all rounds.
+A full analysis makes thirteen model calls (twelve agent calls plus the explanation, plus a short repair when a reply breaks a rule) under a 70,000-token debate limit divided between the agents. Measured token use per live run is in [TESTRESULTS.md](TESTRESULTS.md).
 
 ## What you get from one analysis
 
-- **A verdict**: Buy, Hold, Sell or No Verdict. Only Buy and Sell carry a confidence number.
+- **A verdict with a confidence**: Buy, Hold or Sell, each with a confidence (for Hold: how firmly the debate sits inside the Hold zone), or No Verdict with the reason.
+- **Suggestions**: what would turn the verdict into Buy or Sell (score needed, entry price for the required margin of safety), the fair-value range and analyst target, the next earnings date and the options-implied move, and the size of past swings. Every number is computed from the evidence; it is research, not advice.
 - **Why**: decision gates with their values, the verified supporting points, and the risks the agents raised.
 - **Trust metrics**: *faithfulness* (share of numeric claims that match the data) and *debate integrity* (critiques answered, failed claims corrected).
 - **The debate itself**: per agent, every claim with its evidence, verification status, the round-2 challenges and the round-3 changes.
@@ -97,8 +99,8 @@ A full analysis makes roughly ten model calls (nine agent calls plus the explana
 
 - Python 3.10+ (developed and tested on 3.12)
 - Node.js 18+ and npm
-- At least one LLM key: a **Groq** key and/or a **Google AI (Gemini)** key. Groq is tried first, Gemini is the fallback.
-- Internet access for live analyses (SEC EDGAR, Yahoo Finance and news feeds). The test suite needs neither keys nor network.
+- LLM keys: a **Groq** key and a **Google AI (Gemini)** key. Agents are spread across both providers; with only one key, each agent falls back to that provider's model in its chain.
+- Internet access (SEC EDGAR, Yahoo Finance, news feeds). Both keys and network are also needed for the test suite, which runs live.
 
 ### Install
 
@@ -152,10 +154,9 @@ python scripts/simulate_debate.py --ticker NVDA --persona alpha # debate + signe
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `GROQ_API_KEY` | – | Groq key (tried first) |
-| `GOOGLE_API_KEY` | – | Gemini key (fallback) |
-| `KAI_GROQ_MODEL` | `openai/gpt-oss-120b` | Groq model id (providers retire ids; check what your key can use) |
-| `KAI_GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model id |
+| `GROQ_API_KEY` | – | Groq key |
+| `GOOGLE_API_KEY` | – | Gemini key |
+| `KAI_LLM_CONFIG_PATH` | `config/llm.yaml` | Model routing, output caps and token-budget shares (see below) |
 | `GATEWAY_HOST` | `127.0.0.1` | Bind address. Change only after adding authentication. |
 | `GATEWAY_PORT` | `8080` | Port |
 | `GATEWAY_CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Browser origins allowed to call the API |
@@ -165,6 +166,26 @@ python scripts/simulate_debate.py --ticker NVDA --persona alpha # debate + signe
 | `AP2_PRIVATE_KEY_PATH` | `ap2_private_key.pem` | Ed25519 signing key; generated on first run if missing |
 | `VITE_API_URL` | `http://127.0.0.1:8080` | Backend URL used by the frontend |
 | `VITE_FINNHUB_API_KEY` | – | Optional: live trade prices on the ticker page |
+
+### Models and token budget: `config/llm.yaml`
+
+Each agent has its own chain of models, tried in order, so one provider's rate limit or outage does not stall the debate, and the agents are not one model arguing with itself:
+
+| Agent | First choice | Fallback |
+|---|---|---|
+| Charlie (SEC numbers) | `openai/gpt-oss-120b` (Groq, reasoning low) | `gemini-2.5-flash` |
+| Delta (news) | `gemini-3.5-flash-lite` (thinking minimal) | `openai/gpt-oss-20b` |
+| Gamma (valuation) | `gemini-2.5-flash` (thinking budget 512) | `openai/gpt-oss-120b` |
+| Vega (catalysts & options) | `gemini-3.5-flash` (thinking low) | `openai/gpt-oss-20b` |
+| Sigma (explanation only) | `openai/gpt-oss-120b` (runs after the debate) | `gemini-3.5-flash` |
+
+The same file sets each call's output cap and divides the 70,000-token debate limit into shares (Charlie 21%, Delta 17%, Gamma 23%, Vega 19%, 20% shared reserve). When every model in a chain is rate-limited or temporarily overloaded, the client waits as long as the provider asks (up to a minute) and tries again. Before every call the prompt is estimated and the output cap lowered to what the agent has left; an agent that cannot afford a useful reply is left out of that step with a warning, so a debate never exceeds the limit. Providers retire model ids; list what your keys can use with `python -m coordinator.llm_client --list` and edit the file.
+
+**Wire protocol.** Agents exchange data in a compact format: one line per evidence record with exact values (`[sec:revenue:FY2026] 478834000000 USD`), compact JSON, and pilot-style fixed phrasing (dispute / qualify / support; kept / revised / withdrawn; word limits on arguments). Replies are constrained by JSON schemas whose enums list the evidence ids and claim refs an agent may use, so citing an id it was not given is impossible rather than retried. A reply that is valid JSON but breaks a rule gets a short repair request, not the whole prompt again. Text shown to users stays plain English.
+
+### Agent prompts: `prompts/`
+
+Each agent's system prompt is a plain file you can edit: `prompts/charlie.md`, `delta.md`, `gamma.md`, `vega.md` and `sigma.md`. Rules shared by the four debaters live in `_lane_rule.md`, `_evidence_rule.md` and `_comms_protocol.md` and are pulled in with `{{include: ...}}`, so a rule edited once applies to all of them. Edits take effect on the next analysis. See [prompts/README.md](prompts/README.md) for what not to change (the JSON format and id formats, which code depends on).
 
 ### Decision thresholds: `config/thresholds.yaml`
 
@@ -176,7 +197,7 @@ Every tunable number lives in one validated file, editable by hand. The persona 
 | **Balanced** | 0.35 | 15% | 50% | −0.30 |
 | **Alpha** | 0.25 | 0% | no limit | −0.40 |
 
-The same file sets the fact-check floor (0.60), the minimum number of valid agents (2), the token budget (50,000), the CAPM constants, the Monte Carlo and bootstrap settings, the human-approval threshold (confidence 60) and the quant layer's seed. Zen and Balanced cannot issue a Buy without a computed DCF margin of safety; Alpha can.
+The same file sets the judge's domain weights (fundamentals 0.30, valuation 0.30, news 0.20, catalysts 0.20), the fact-check floor (0.60), the minimum number of valid agents (2), the token budget (70,000), the CAPM constants, the Monte Carlo and bootstrap settings, the human-approval threshold (confidence 60) and the quant layer's seed. Zen and Balanced cannot issue a Buy without a computed DCF margin of safety; Alpha can.
 
 ## How the verdict is computed
 
@@ -184,18 +205,26 @@ All of this runs in code (`judge/`), not in a model.
 
 ```
 agent score   s_a = stance (+1 bullish, 0 neutral, −1 bearish) × confidence/100 × faithfulness_a
-debate score  S   = average of s_a over the agents that passed the fact-check        (−1 … +1)
+debate score  S   = weighted average of s_a over the agents that passed the fact-check (−1 … +1),
+                    weights = judge.weights (the judge weighs the domains, never the agents)
+coverage          = weight of the agents counted ÷ total weight
 
 Buy   if S ≥ buy threshold and margin of safety and volatility gates pass
 Sell  if S ≤ sell threshold
 Hold  otherwise                       (a blocked Buy is reported with the gate that blocked it)
 
-confidence (Buy/Sell only) = 100 × |S| × integrity × (agents counted / 3) × Q × C
+confidence, Buy/Sell = 100 × |S| × integrity × coverage × Q × C
+confidence, Hold     = 100 × hold conviction × integrity × coverage
+hold conviction      = distance from S to the nearer Buy/Sell trigger, relative to that trigger
+                       (S = 0 → 1; S just under the buy trigger → near 0); when S clears the buy
+                       trigger but a gate blocks it: how far the gate missed (a margin of safety
+                       of 0.10 against 0.15 is a weak Hold, −22 against 0.15 a firm one)
 ```
 
 - **Faithfulness** is verified claims ÷ checkable claims (with a floor of three so one easy claim cannot score 100%). Numeric claims are re-computed (`equals`, `growth`, `ratio`, `diff`); quotes must appear in the cited article; inferences must rest on verified claims.
 - **Integrity** rewards answering every critique and correcting claims that failed the fact-check. Changing your mind for a stated reason costs nothing; an unexplained flip is penalised.
 - **Q (agreement)** lowers confidence when the quant report's probabilities point against the verdict. **C (contradictions)** lowers it when agents' stances conflict with the report. Both can only lower confidence, by at most half each, and never change Buy/Hold/Sell.
+- **Suggestions** (`judge/playbook.py`) are computed from the same evidence: the score and entry price that would make it a Buy (DCF value × (1 − required margin of safety)), the score that would make it a Sell, the Monte Carlo fair-value range, the analyst consensus target, the next earnings date and the options-implied move, past one-day losses and drawdown, and where other risk settings disagree.
 - **Human approval:** a Buy or Sell at confidence ≥ 60 requires explicit approval. Lower-confidence Buy/Sell is delivered as a visible warning, never as a plain success.
 
 ## The quant layer
@@ -215,16 +244,17 @@ confidence (Buy/Sell only) = 100 × |S| × integrity × (agents counted / 3) × 
 
 ```
 .
-├── agents/            Charlie, Delta, Gamma + the shared claim schema (pydantic)
+├── agents/            Charlie, Delta, Gamma, Vega + the shared claim schema (pydantic)
+├── prompts/           Editable system prompt per agent, plus shared rules
 ├── coordinator/       Debate orchestration, transcript, LLM client, config loader, debate log
-├── judge/             Verifier (claim checks), scoring (verdict), Sigma, AP2 signing
+├── judge/             Verifier (claim checks), scoring (verdict), playbook (suggestions), Sigma, AP2 signing
 ├── quant/             Deterministic statistics and the QuantReport model
 ├── gateway/           FastAPI app, session store (SQLite), HITL manager, response schemas
-├── mcp_server/        Data tools (SEC, market, news, finance math); optional MCP adapter
-├── config/            thresholds.yaml
-├── scripts/           simulate_debate.py, calibration_backtest.py (live)
+├── mcp_server/        Data tools (SEC, market, news, catalysts, finance math); optional MCP adapter
+├── config/            thresholds.yaml, llm.yaml
+├── scripts/           simulate_debate.py, calibration_backtest.py, write_test_results.py
 ├── kai-frontend/      React 19 + Vite + Bootstrap 5.3 dashboard
-└── tests/             Offline test suite and recorded fixtures
+└── tests/             Live test suite (real models, real data); results in TESTRESULTS.md
 ```
 
 Runtime files (all gitignored): `kai.db` (sessions, history, chat), `debate_logs/` (the persisted transcript of each debate), `alpha_packets/` (signed packets), `*.pem` (signing key).
@@ -233,13 +263,14 @@ Runtime files (all gitignored): `kai.db` (sessions, history, chat), `debate_logs
 
 | Data | Source |
 |---|---|
-| Financial statements (5 fiscal years: revenue, margins, EPS, cash flow, debt, equity, shares) | SEC EDGAR XBRL company facts |
-| Prices, 10-year history, splits, S&P 500, 10-year Treasury yield | Yahoo Finance via `yfinance` |
+| Financial statements (5 fiscal years and trailing 12 months: revenue, margins, EPS, cash flow, debt, equity, shares), per-share values split-adjusted | SEC EDGAR XBRL company facts (10-K and 10-Q) |
+| Prices, return windows with exact dates, 10-year history, splits, S&P 500, 10-year Treasury yield | Yahoo Finance via `yfinance` |
+| Next earnings date and consensus, analyst targets, ratings, upgrades and estimate revisions, option chains (implied volatility and move) | Yahoo Finance via `yfinance` |
 | News with summaries | yfinance news, Yahoo Finance RSS, Nasdaq RSS and Google News RSS, fetched in parallel, de-duplicated, with conflicts resolved by majority |
 
 **Design notes.** The gateway runs debates in a thread pool so it stays responsive; live progress is read from the debate log, which the coordinator writes atomically after every agent step. Session state, including a pending approval, survives a server restart. The rationale for each decision, and the alternatives rejected, are in [DESIGN.md](DESIGN.md).
 
-**Frontend.** Light theme by default with a dark option; Inter and JetBrains Mono are bundled locally. It shows the committee's status live, the verdict, the quant report, per-agent claims with clickable evidence, the debate log and the token trace, plus loading, error, circuit-breaker and approval states.
+**Frontend.** Light theme by default with a dark option; Inter and JetBrains Mono are bundled locally. It shows the committee's status live, the verdict with its confidence and suggestions, the market snapshot time, the quant report, per-agent claims with clickable evidence, the debate log and the token trace, plus loading, error, circuit-breaker and approval states.
 
 ## API reference
 
@@ -261,19 +292,24 @@ Base URL `http://127.0.0.1:8080`. There is no authentication (see [Security](#se
 
 ## Testing
 
+Every test is **live**: real LLM calls (Groq and Gemini) and real data (SEC EDGAR, Yahoo Finance, news feeds). There is no fake model and no recorded data. The latest results, with every number from the run, are in [TESTRESULTS.md](TESTRESULTS.md).
+
 ```bash
-pytest                                   # backend: offline, no keys, no network (about 240 tests)
-pytest --live                            # also run tests that need network / API keys
+pytest                                   # live: needs GROQ_API_KEY and GOOGLE_API_KEY; ~15-25 min, ~200k tokens
+python scripts/write_test_results.py     # writes TESTRESULTS.md from that run
 
 cd kai-frontend
 npm run lint
-npm test                                 # component and client tests against real API payloads
+npm test                                 # dashboard components rendered with /status payloads captured from live runs
 npm run build
 ```
 
-- The backend suite runs against **recorded** SEC, news and yfinance fixtures and a fake LLM client, and blocks any unexpected network call.
-- The frontend tests render the real components against `/status` payloads exported from the backend. A backend test fails if the API shape drifts from those fixtures; regenerate them with `KAI_WRITE_UI_FIXTURES=1 pytest tests/integration/test_ui_fixtures.py`.
-- Calibration against history is a separate, live script: `python scripts/calibration_backtest.py --tickers AAPL MSFT --start 2018-01-01 --end 2025-06-30`. It builds the report using only data available at each past date, and asserts no input is dated after it.
+- The suite runs three complete debates (NVDA, AAPL, TSLA, one per persona) through the gateway API, then re-derives each property independently: the fact-check is re-run on every claim, the debate score and confidence are recomputed from the published formulas, every agent's price is checked against the market snapshot, P/E against TTM EPS, stance changes against the lane rule, round-2 disputes against the window rule, suggestion numbers against the evidence, and the signed packet's signature.
+- Data tests recompute return windows from raw closes, check NVDA's pre-2024-split EPS is split-adjusted, and check TTM periods, catalysts and news.
+- Model tests call every model in `config/llm.yaml` under the strict JSON schema.
+- Everything a test run writes (database, logs, packets, a throwaway signing key) goes to `tests/artifacts/`, never to the system's own data.
+- Results vary between runs: markets, news and model replies change. Provider rate limits or outages can fail a run; the report shows which.
+- Calibration against history is a separate, live script: `python scripts/calibration_backtest.py --tickers AAPL MSFT --start 2018-01-01 --end 2025-06-30`.
 
 ## Security and privacy
 
@@ -292,7 +328,7 @@ Stated plainly, because they matter for how much to trust the output:
 - **Fact-checking covers data claims, not judgement.** Numbers and quotes are verified; the agents' qualitative `risks` lists are the model's own words and are not checked.
 - **News relevance is not filtered.** A ticker's feed can include stories mainly about other companies.
 - **Base rates and calibration are usually "unavailable".** One stock's own history rarely contains 30 comparable cases, and calibration needs the backtest to be run first.
-- **Model dependence.** Output quality depends on the LLM. Providers retire model ids; set `KAI_GROQ_MODEL` / `KAI_GEMINI_MODEL` if a default stops working.
+- **Model dependence.** Output quality depends on the LLMs. Providers retire model ids; edit `config/llm.yaml` if a default stops working. Sigma's explanation is unverified model text: in testing the small model occasionally misstated units ("−22%" for a margin of safety of −22.00) even though the verdict and gates it explains are computed and shown separately.
 - **Not a trading system.** Approval does not place an order. There is no brokerage integration.
 - **Partial pieces.** The MCP server in `mcp_server/` exposes the data tools but is not used by the app's own debate path and is not covered by tests; Phoenix tracing (`PHOENIX_ENABLED`) is an optional hook. The earlier A2A and ADK claims were dropped (see DESIGN.md §6).
 - The frontend has been verified in headless Chromium (light, dark, phone width) and under jsdom, not across all browsers.

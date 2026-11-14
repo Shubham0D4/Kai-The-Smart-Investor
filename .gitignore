@@ -69,3 +69,6 @@ temp/
 
 # runtime output: signed verdict packets
 alpha_packets/
+
+# live test run output (database, logs, packets, results)
+tests/artifacts/

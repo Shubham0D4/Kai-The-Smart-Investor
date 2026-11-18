@@ -38,7 +38,7 @@ METRICS: Dict[str, Tuple[str, str, List[str], str]] = {
     "net_income": ("Net income", "USD", ["NetIncomeLoss"], "duration"),
     "eps_diluted": ("Diluted EPS", "USD/shares", ["EarningsPerShareDiluted"], "duration"),
     "operating_cash_flow": ("Operating cash flow", "USD", ["NetCashProvidedByUsedInOperatingActivities"], "duration"),
-    "capex": ("Capital expenditure", "USD", ["PaymentsToAcquirePropertyPlantAndEquipment"], "duration"),
+    "capex": ("Capital expenditure", "USD", ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"], "duration"),
     "cash": ("Cash and cash equivalents", "USD", ["CashAndCashEquivalentsAtCarryingValue"], "instant"),
     "long_term_debt": ("Long-term debt (incl. current portion)", "USD", ["LongTermDebt"], "instant"),
     "commercial_paper": ("Commercial paper", "USD", ["CommercialPaper"], "instant"),

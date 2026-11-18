@@ -345,6 +345,8 @@ class NewsArticle(BaseModel):
 class NewsResponse(BaseModel):
     articles: List[NewsArticle]
     providers_failed: Dict[str, str] = Field(default_factory=dict)
+    providers_skipped: Dict[str, str] = Field(default_factory=dict, description="feeds not asked, and why")
+    provider_counts: Dict[str, int] = Field(default_factory=dict, description="articles each feed that answered returned")
     warnings: List[str] = Field(default_factory=list)
 
 

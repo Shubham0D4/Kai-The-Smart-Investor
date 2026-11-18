@@ -55,6 +55,32 @@ def _cagr(first: float, last: float, years: int) -> Optional[float]:
     return (last / first) ** (1 / years) - 1
 
 
+# Records dropped from Gamma's prompt: they repeat another record or carry no information. Gamma's
+# evidence is the largest of the four agents, and Groq's free tier rejects a request above 8,000
+# tokens per minute (a live call of 8,927 tokens failed). Everything computed from them (EPS growth,
+# free cash flow, DCF, margin of safety) is still in the pack and in the judge's gates.
+_REPEATED_IDS = {
+    "mkt:shares_outstanding",        # same figure as sec:shares_outstanding:latest
+    "mkt:price_1y_ago",              # mkt:return_1y already states the move
+}
+# With the default zero-drift setting the normal model is exactly 0.5 (interval included): no signal.
+_NORMAL_IDS = ("quant:forward.prob_up_normal", "quant:forward.prob_up_normal.low", "quant:forward.prob_up_normal.high")
+_HISTORY_YEARS = 3                   # fiscal years kept of each raw SEC series and its free-cash-flow calc
+
+
+def slim_evidence(records):
+    """Gamma's evidence without repeated records and with only the latest few fiscal years of each series."""
+    records = list(records)
+    years = sorted({r.id.rsplit(":FY", 1)[1] for r in records
+                    if r.id.startswith(("sec:", "calc:fcf:")) and ":FY" in r.id})
+    old = set(years[:-_HISTORY_YEARS])
+    flat = [r for r in records if r.id in _NORMAL_IDS]
+    drop_normal = len(flat) == len(_NORMAL_IDS) and all(r.value == 0.5 for r in flat)
+    return [r for r in records
+            if r.id not in _REPEATED_IDS and not (drop_normal and r.id in _NORMAL_IDS) and not (":FY" in r.id and r.id.rsplit(":FY", 1)[1] in old
+                                                   and r.id.startswith(("sec:", "calc:fcf:")))]
+
+
 class GammaAgent:
     """
     Gamma - Valuation Analysis Specialist
@@ -263,7 +289,7 @@ class GammaAgent:
                                financials.get("error", "SEC financial data unavailable"), "data_source")
 
         computed = self.compute(financials, market, quant_report)
-        evidence = computed["evidence"]
+        evidence = slim_evidence(computed["evidence"])
 
         prompt = f"""
 {evidence_block(evidence)}

@@ -5,8 +5,9 @@
 # id), the next one answers. Different agents start on different models so one provider's rate
 # limit does not stall the whole debate, and so the debate is not one model arguing with itself.
 #
-#   provider  : groq | gemini
-#   reasoning : groq reasoning models (gpt-oss): low | medium | high. Hidden reasoning is billed
+#   provider  : groq | gemini | nvidia (last-resort free fallback; needs NVIDIA_API_KEY)
+#   reasoning : groq reasoning models (gpt-oss): low | medium | high. On nvidia, any value switches the
+#               model's thinking mode on (off when unset: thinking would use up the output cap). Hidden reasoning is billed
 #               as output tokens; "low" cut a real round-2 call from 11.5k to 7.5k tokens.
 #   thinking_budget : gemini 2.5: max hidden thinking tokens (0 = off)
 #   thinking_level  : gemini 3.x: minimal | low | medium | high
@@ -15,27 +16,36 @@
 roles:
   charlie:                       # SEC numbers: strongest reasoning model first
     - {provider: groq, model: openai/gpt-oss-120b, reasoning: low}
-    - {provider: gemini, model: gemini-2.5-flash, thinking_budget: 512}
     - {provider: gemini, model: gemini-3.5-flash-lite, thinking_level: minimal}
+    - {provider: nvidia, model: nvidia/nemotron-3-ultra-550b-a55b}
+    - {provider: openrouter, model: nvidia/nemotron-3-ultra-550b-a55b:free}
   delta:                         # news text: long input, light reasoning
     - {provider: gemini, model: gemini-3.5-flash-lite, thinking_level: minimal}
     - {provider: groq, model: openai/gpt-oss-20b, reasoning: low}
     - {provider: groq, model: openai/gpt-oss-120b, reasoning: low}
+    - {provider: nvidia, model: nvidia/nemotron-3-ultra-550b-a55b}
+    - {provider: openrouter, model: nvidia/nemotron-3-ultra-550b-a55b:free}
   gamma:                         # valuation and risk metrics
-    # gemini-2.5-flash free tier: only 20 requests per day (measured 2026-11-14); the chain
-    # falls through to the next model when that quota is used up
-    - {provider: gemini, model: gemini-2.5-flash, thinking_budget: 512}
-    - {provider: groq, model: openai/gpt-oss-120b, reasoning: low}
+    # Largest prompt of the four agents, so it starts on Gemini: Groq's free tier rejects any
+    # request above 8,000 tokens per minute. (gemini-2.5-flash was removed from every chain: it
+    # allowed only 20 free requests a day, measured 2026-11-14, and is deprecated for new projects.)
     - {provider: gemini, model: gemini-3.5-flash-lite, thinking_level: minimal}
+    - {provider: groq, model: openai/gpt-oss-120b, reasoning: low}
+    - {provider: nvidia, model: nvidia/nemotron-3-ultra-550b-a55b}
+    - {provider: openrouter, model: nvidia/nemotron-3-ultra-550b-a55b:free}
   vega:                          # catalysts, analyst revisions, options
     - {provider: gemini, model: gemini-3.5-flash, thinking_level: low}
     - {provider: groq, model: openai/gpt-oss-20b, reasoning: low}
     - {provider: gemini, model: gemini-3.5-flash-lite, thinking_level: minimal}
+    - {provider: nvidia, model: nvidia/nemotron-3-ultra-550b-a55b}
+    - {provider: openrouter, model: nvidia/nemotron-3-ultra-550b-a55b:free}
   sigma:                         # explanation and suggestions; runs after the debate, so sharing
                                  # Charlie's model causes no rate-limit contention. The verdict and
                                  # every suggestion number are computed in code.
     - {provider: groq, model: openai/gpt-oss-120b, reasoning: low}
     - {provider: gemini, model: gemini-3.5-flash, thinking_level: low}
+    - {provider: nvidia, model: nvidia/nemotron-3-ultra-550b-a55b}
+    - {provider: openrouter, model: nvidia/nemotron-3-ultra-550b-a55b:free}
   chat:                          # dashboard assistant (Groq only)
     - {provider: groq, model: openai/gpt-oss-20b, reasoning: low}
 
@@ -45,6 +55,13 @@ max_output_tokens:
   round2: 2000
   round3: 3500
   narrative: 1200
+
+# Largest single request (prompt + output cap) each provider accepts. Groq's free tier allows
+# 8,000 tokens per minute and rejects a bigger request outright (a live Gamma call of 8,927
+# tokens failed). Before every Groq call Kai lowers the output cap to fit; if the prompt alone
+# leaves too little room, the call goes to the next model in the chain. 7,500 keeps a margin.
+request_token_limits:
+  groq: 7500
 
 # The debate's token limit (circuit_breaker.token_limit in thresholds.yaml) is divided between
 # the agents. An agent may use its share plus whatever is left of the shared reserve; one that

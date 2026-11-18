@@ -12,7 +12,7 @@ each agent its slice. Every record has a stable ID, value, unit, period and sour
 | Agent | Receives | Source | Example ID |
 |---|---|---|---|
 | Charlie | Last 5 fiscal years + latest quarter: revenue, gross profit, operating income, net income, diluted EPS, operating cash flow, capex, cash, total debt, equity, shares | SEC XBRL `companyfacts` API (same host and User-Agent as today's `sec_filings.py`), each fact tagged with its accession number | `sec:revenue:FY2025` |
-| Delta | Up to 15 articles: title, publisher, date, URL, summary text, `providers[]` | yfinance news, Yahoo Finance RSS, Nasdaq RSS and Google News RSS, fetched in parallel and merged (below) | `news:7` |
+| Delta | Up to 15 articles: title, publisher, date, URL, summary text, `providers[]` | Finnhub company news (free key), Yahoo Finance RSS and Google News RSS, fetched in parallel and merged (below); yfinance news only as a last resort | `news:7` |
 | Gamma | Price, 2y daily closes for the stock and the S&P 500, 10-year Treasury yield, shares outstanding (yfinance); EPS, net debt and 5y free cash flow = OCF − capex (from Charlie's SEC facts); computed PE, PEG, beta, DCF, annualised volatility, Sharpe (`finance_math.py`) | yfinance + SEC + computed | `mkt:price`, `calc:dcf.value_per_share` |
 
 **News merge.** All providers are called in parallel; any that fail are skipped and named in

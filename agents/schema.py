@@ -398,19 +398,23 @@ def generate_validated(model, prompt: str, validate: Callable[[str], BaseModel],
                        schema: Optional[Dict] = None, schema_name: str = "reply",
                        max_output_tokens: Optional[int] = None, repair_hint: str = "",
                        budget_left: Optional[Callable[[], int]] = None) -> StructuredResult:
-    """Call the model, validate the reply, repair once on invalid output, then fail cleanly.
+    """Call the model, validate the reply, repair once on invalid output, then give a different
+    model in the chain one last try before failing the agent cleanly.
 
     schema: JSON schema the provider enforces (strict mode); max_output_tokens caps each call.
     budget_left(): tokens this agent may still spend. Before every attempt the prompt is
     estimated and the output cap is lowered to what remains, so a call can never overspend;
     if not even a third of the normal cap is left, the step is skipped with error_type "budget".
+    The last try (attempt 3) skips the models whose replies were already rejected, so a model that
+    keeps breaking the format cannot drop the agent from the debate while another could answer.
     Token usage is summed over every attempt."""
     usage = {k: 0 for k in USAGE_KEYS}
     models: List[str] = []
     schema_text = json.dumps(schema) if schema else ""
     current_prompt = prompt
     first_error = last_error = None
-    for attempt in (1, 2):
+    can_switch = len(getattr(model, "chain", ())) > 1   # a client with a model chain can switch models
+    for attempt in (1, 2, 3):
         cap = max_output_tokens
         if budget_left is not None and max_output_tokens:
             room = budget_left() - _estimate(model, current_prompt + schema_text)
@@ -422,8 +426,9 @@ def generate_validated(model, prompt: str, validate: Callable[[str], BaseModel],
                 return StructuredResult(None, err, "budget", attempt - 1, usage, models)
             cap = min(max_output_tokens, room)
         try:
+            extra = {"exclude": set(models)} if attempt == 3 else {}
             response = model.generate_content(current_prompt, schema=schema, schema_name=schema_name,
-                                              max_output_tokens=cap)
+                                              max_output_tokens=cap, **extra)
         except Exception as e:  # every model in the chain failed: no retry here
             return StructuredResult(None, f"LLM call failed: {e}", "llm", attempt, usage, models)
         for k, v in _usage(response).items():
@@ -435,11 +440,12 @@ def generate_validated(model, prompt: str, validate: Callable[[str], BaseModel],
         except ValueError as e:
             last_error = str(e)
             first_error = first_error or last_error
-            if attempt == 2:
+            if attempt == 3 or (attempt == 2 and not can_switch):
                 break
             current_prompt = _repair_prompt(prompt, text, last_error, repair_hint)
     detail = last_error if last_error == first_error else f"{last_error} (first reply: {first_error})"
-    return StructuredResult(None, f"invalid output after 2 attempts: {detail}", "invalid_output", 2, usage, models)
+    return StructuredResult(None, f"invalid output after {attempt} attempts: {detail}", "invalid_output",
+                            attempt, usage, models)
 
 
 def _estimate(model, text: str) -> int:

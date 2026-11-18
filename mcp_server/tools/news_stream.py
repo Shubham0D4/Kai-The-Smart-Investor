@@ -1,6 +1,9 @@
 """
-News for Delta from several free, key-less providers fetched in parallel (DESIGN.md §1):
-yfinance news, Yahoo Finance RSS, Nasdaq RSS and Google News RSS.
+News for Delta from several free providers fetched in parallel (DESIGN.md §1): Finnhub company
+news (free key, FINNHUB_API_KEY; skipped when no key is set), Yahoo Finance RSS and Google News RSS.
+yfinance news is a last resort: it is only asked when those return fewer than MIN_ARTICLES
+articles (its endpoint failed in both live tests). Nasdaq RSS was removed: it answered 403 in
+both live tests.
 
 Articles are deduplicated by URL and then by normalised title. When providers disagree on a
 field of the same article, the majority value wins; ties go to PROVIDER_ORDER. A provider
@@ -9,6 +12,7 @@ returns success=False. Articles without a summary from any provider are flagged 
 """
 
 import html
+import os
 import re
 import xml.etree.ElementTree as ET
 from collections import Counter
@@ -21,7 +25,9 @@ from urllib.parse import quote, urlsplit, urlunsplit
 import httpx
 import yfinance as yf
 
-PROVIDER_ORDER = ["yfinance", "yahoo_rss", "nasdaq_rss", "google_rss"]
+PROVIDER_ORDER = ["finnhub", "yahoo_rss", "google_rss", "yfinance"]
+PRIMARY = ["finnhub", "yahoo_rss", "google_rss"]
+MIN_ARTICLES = 5      # fewer articles than this from the primary providers: ask yfinance too
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; Kai-Economist/1.0)"}
 SUMMARY_MAX_CHARS = 800
 
@@ -123,15 +129,27 @@ def _from_yahoo_rss(ticker: str) -> List[Dict]:
     } for i in _rss_items(_get(url))]
 
 
-def _from_nasdaq_rss(ticker: str) -> List[Dict]:
-    url = f"https://www.nasdaq.com/feed/rssoutbound?symbol={quote(ticker)}"
-    return [{
-        "title": _clean(_text(i, "title")),
-        "url": _text(i, "link"),
-        "published_at": _parse_rfc822(_text(i, "pubDate")),
-        "source": _text(i, "{http://purl.org/dc/elements/1.1/}creator"),
-        "summary": _clean(_text(i, "description")),
-    } for i in _rss_items(_get(url))]
+def _from_finnhub(ticker: str) -> List[Dict]:
+    """Finnhub company news, last 30 days (free tier: 60 calls a minute). Needs FINNHUB_API_KEY."""
+    key = os.getenv("FINNHUB_API_KEY") or os.getenv("VITE_FINNHUB_API_KEY")
+    if not key:
+        raise RuntimeError("FINNHUB_API_KEY not set")
+    today = _now().date()
+    # key goes in a header, not the URL, so it never shows up in an error message or the dashboard
+    r = httpx.get("https://finnhub.io/api/v1/company-news", headers={**HEADERS, "X-Finnhub-Token": key},
+                  timeout=10.0, params={"symbol": ticker.upper(), "from": (today - timedelta(days=30)).isoformat(),
+                                        "to": today.isoformat()})
+    r.raise_for_status()
+    out = []
+    for n in r.json():
+        out.append({
+            "title": _clean(n.get("headline")),
+            "url": n.get("url"),
+            "published_at": _iso(datetime.fromtimestamp(n["datetime"], timezone.utc)) if n.get("datetime") else None,
+            "source": n.get("source"),
+            "summary": _clean(n.get("summary")),
+        })
+    return out
 
 
 def _from_google_rss(ticker: str) -> List[Dict]:
@@ -152,10 +170,10 @@ def _from_google_rss(ticker: str) -> List[Dict]:
 
 
 PROVIDERS: Dict[str, Callable[[str], List[Dict]]] = {
-    "yfinance": _from_yfinance,
+    "finnhub": _from_finnhub,
     "yahoo_rss": _from_yahoo_rss,
-    "nasdaq_rss": _from_nasdaq_rss,
     "google_rss": _from_google_rss,
+    "yfinance": _from_yfinance,
 }
 
 
@@ -221,13 +239,26 @@ def get_news_stream(ticker: str, days: int = 7, max_articles: int = 15) -> Dict:
 
     results: Dict[str, List[Dict]] = {}
     failed: Dict[str, str] = {}
-    with ThreadPoolExecutor(max_workers=len(PROVIDERS)) as pool:
-        futures = {name: pool.submit(fn, ticker) for name, fn in PROVIDERS.items()}
-        for name, fut in futures.items():
-            try:
-                results[name] = fut.result()
-            except Exception as e:
-                failed[name] = str(e)[:200]
+    skipped: Dict[str, str] = {}
+
+    def run(names: List[str]):
+        with ThreadPoolExecutor(max_workers=len(names)) as pool:
+            futures = {name: pool.submit(PROVIDERS[name], ticker) for name in names}
+            for name, fut in futures.items():
+                try:
+                    results[name] = fut.result()
+                except Exception as e:
+                    failed[name] = str(e)[:200]
+
+    primary = list(PRIMARY)
+    if not (os.getenv("FINNHUB_API_KEY") or os.getenv("VITE_FINNHUB_API_KEY")):
+        primary.remove("finnhub")
+        skipped["finnhub"] = "no FINNHUB_API_KEY set"
+    run(primary)
+    if sum(len(v) for v in results.values()) < MIN_ARTICLES:
+        run(["yfinance"])          # last resort
+    else:
+        skipped["yfinance"] = "not needed: the other feeds returned enough articles"
 
     if not results:
         return {"success": False, "ticker": ticker, "articles": [], "count": 0,
@@ -250,6 +281,9 @@ def get_news_stream(ticker: str, days: int = 7, max_articles: int = 15) -> Dict:
     if headline_only:
         warnings.append(f"{headline_only} of {len(articles)} articles have no summary (headline only)")
 
+    if len(results) == 1:
+        warnings.append(f"news coverage is thin: only {next(iter(results))} answered")
+
     return {
         "success": True,
         "ticker": ticker,
@@ -259,6 +293,12 @@ def get_news_stream(ticker: str, days: int = 7, max_articles: int = 15) -> Dict:
         "sources": sorted({a["source"] for a in articles}),
         "providers_ok": [p for p in PROVIDER_ORDER if p in results],
         "providers_failed": failed,
+        "providers_skipped": skipped,
+        # per-feed coverage: articles each feed returned (before merging and the time window),
+        # and how many of the articles kept come from it
+        "provider_counts": {p: len(results[p]) for p in PROVIDER_ORDER if p in results},
+        "articles_by_provider": {p: sum(p in a["providers"] for a in articles)
+                                 for p in PROVIDER_ORDER if p in results},
         "warnings": warnings,
     }
 

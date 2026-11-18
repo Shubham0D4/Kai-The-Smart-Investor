@@ -79,7 +79,7 @@ flowchart TD
 6. **Round 3.** Each agent gives a final stance and answers every critique it received. It may change its stance only when its own claims were disputed with data or failed the fact-check, never because another domain points the other way (that would count that evidence twice).
 7. **Judge.** Sigma weighs the four domains, applies the persona's thresholds, computes the confidence (Hold included) and a playbook of suggestions. One model call writes the explanation afterwards.
 
-A full analysis makes thirteen model calls (twelve agent calls plus the explanation, plus a short repair when a reply breaks a rule) under a 70,000-token debate limit divided between the agents. Measured token use per live run is in [TESTRESULTS.md](TESTRESULTS.md).
+A full analysis makes thirteen model calls (twelve agent calls plus the explanation, plus a short repair when a reply breaks a rule) under an 80,000-token debate limit divided between the agents. Measured token use per live run is in [TESTRESULTS.md](TESTRESULTS.md).
 
 ## What you get from one analysis
 
@@ -156,6 +156,8 @@ python scripts/simulate_debate.py --ticker NVDA --persona alpha # debate + signe
 |---|---|---|
 | `GROQ_API_KEY` | – | Groq key |
 | `GOOGLE_API_KEY` | – | Gemini key |
+| `NVIDIA_API_KEY` | – | Optional: free last-resort fallback model (NVIDIA `nemotron-3-ultra-550b-a55b` from build.nvidia.com; trial for prototyping, about 40 requests a minute, prompts may be logged). |
+| `FINNHUB_API_KEY` | – | Optional: Finnhub company news (free key, 60 calls a minute). Without it that feed is skipped. |
 | `KAI_LLM_CONFIG_PATH` | `config/llm.yaml` | Model routing, output caps and token-budget shares (see below) |
 | `GATEWAY_HOST` | `127.0.0.1` | Bind address. Change only after adding authentication. |
 | `GATEWAY_PORT` | `8080` | Port |
@@ -173,13 +175,13 @@ Each agent has its own chain of models, tried in order, so one provider's rate l
 
 | Agent | First choice | Fallback |
 |---|---|---|
-| Charlie (SEC numbers) | `openai/gpt-oss-120b` (Groq, reasoning low) | `gemini-2.5-flash` |
+| Charlie (SEC numbers) | `openai/gpt-oss-120b` (Groq, reasoning low) | `gemini-3.5-flash-lite` |
 | Delta (news) | `gemini-3.5-flash-lite` (thinking minimal) | `openai/gpt-oss-20b` |
-| Gamma (valuation) | `gemini-2.5-flash` (thinking budget 512) | `openai/gpt-oss-120b` |
+| Gamma (valuation) | `gemini-3.5-flash-lite` (thinking minimal) | `openai/gpt-oss-120b` |
 | Vega (catalysts & options) | `gemini-3.5-flash` (thinking low) | `openai/gpt-oss-20b` |
 | Sigma (explanation only) | `openai/gpt-oss-120b` (runs after the debate) | `gemini-3.5-flash` |
 
-The same file sets each call's output cap and divides the 70,000-token debate limit into shares (Charlie 21%, Delta 17%, Gamma 23%, Vega 19%, 20% shared reserve). When every model in a chain is rate-limited or temporarily overloaded, the client waits as long as the provider asks (up to a minute) and tries again. Before every call the prompt is estimated and the output cap lowered to what the agent has left; an agent that cannot afford a useful reply is left out of that step with a warning, so a debate never exceeds the limit. Providers retire model ids; list what your keys can use with `python -m coordinator.llm_client --list` and edit the file.
+The same file sets each call's output cap and divides the 80,000-token debate limit into shares (Charlie 20%, Delta 19%, Gamma 25%, Vega 16%, 20% shared reserve). When every model in a chain is rate-limited or temporarily overloaded, the client waits as long as the provider asks (up to a minute) and tries again. Before every call the prompt is estimated and the output cap lowered to what the agent has left; an agent that cannot afford a useful reply is left out of that step with a warning, so a debate never exceeds the limit. Every chain ends with NVIDIA's hosted `nemotron-3-ultra-550b-a55b` when `NVIDIA_API_KEY` is set. Groq's free tier rejects any request above 8,000 tokens per minute, so before each Groq call the output cap is lowered to fit (`request_token_limits` in the file), and a prompt too big for it goes straight to the next model. On a rate limit (429) the client waits the `retry-after` the provider sends, up to a minute, and asks the same model again before falling through. A reply that fails validation is repaired once; if it still fails, a different model in the chain gets one last try before the agent is dropped. Providers retire model ids; list what your keys can use with `python -m coordinator.llm_client --list` and edit the file.
 
 **Wire protocol.** Agents exchange data in a compact format: one line per evidence record with exact values (`[sec:revenue:FY2026] 478834000000 USD`), compact JSON, and pilot-style fixed phrasing (dispute / qualify / support; kept / revised / withdrawn; word limits on arguments). Replies are constrained by JSON schemas whose enums list the evidence ids and claim refs an agent may use, so citing an id it was not given is impossible rather than retried. A reply that is valid JSON but breaks a rule gets a short repair request, not the whole prompt again. Text shown to users stays plain English.
 
@@ -197,7 +199,7 @@ Every tunable number lives in one validated file, editable by hand. The persona 
 | **Balanced** | 0.35 | 15% | 50% | −0.30 |
 | **Alpha** | 0.25 | 0% | no limit | −0.40 |
 
-The same file sets the judge's domain weights (fundamentals 0.30, valuation 0.30, news 0.20, catalysts 0.20), the fact-check floor (0.60), the minimum number of valid agents (2), the token budget (70,000), the CAPM constants, the Monte Carlo and bootstrap settings, the human-approval threshold (confidence 60) and the quant layer's seed. Zen and Balanced cannot issue a Buy without a computed DCF margin of safety; Alpha can.
+The same file sets the judge's domain weights (fundamentals 0.30, valuation 0.30, news 0.20, catalysts 0.20), the fact-check floor (0.60), the minimum number of valid agents (2), the token budget (80,000), the CAPM constants, the Monte Carlo and bootstrap settings, the human-approval threshold (confidence 60) and the quant layer's seed. Zen and Balanced cannot issue a Buy without a computed DCF margin of safety; Alpha can.
 
 ## How the verdict is computed
 
@@ -266,7 +268,7 @@ Runtime files (all gitignored): `kai.db` (sessions, history, chat), `debate_logs
 | Financial statements (5 fiscal years and trailing 12 months: revenue, margins, EPS, cash flow, debt, equity, shares), per-share values split-adjusted | SEC EDGAR XBRL company facts (10-K and 10-Q) |
 | Prices, return windows with exact dates, 10-year history, splits, S&P 500, 10-year Treasury yield | Yahoo Finance via `yfinance` |
 | Next earnings date and consensus, analyst targets, ratings, upgrades and estimate revisions, option chains (implied volatility and move) | Yahoo Finance via `yfinance` |
-| News with summaries | yfinance news, Yahoo Finance RSS, Nasdaq RSS and Google News RSS, fetched in parallel, de-duplicated, with conflicts resolved by majority |
+| News with summaries | Finnhub company news (needs a free key), Yahoo Finance RSS and Google News RSS, fetched in parallel, de-duplicated, with conflicts resolved by majority; yfinance news is asked only when those return fewer than 5 articles. The dashboard shows how many articles each feed returned. |
 
 **Design notes.** The gateway runs debates in a thread pool so it stays responsive; live progress is read from the debate log, which the coordinator writes atomically after every agent step. Session state, including a pending approval, survives a server restart. The rationale for each decision, and the alternatives rejected, are in [DESIGN.md](DESIGN.md).
 
@@ -315,7 +317,7 @@ npm run build
 
 - **Single-user, local, no authentication.** The gateway binds to `127.0.0.1` and accepts browser requests only from the Vite origins. **Do not expose it on a network** before adding authentication.
 - **Your keys** live in `.env` (gitignored). They are used only to call the providers you configured.
-- **What leaves your machine:** the evidence records and prompts for each analysis are sent to your configured LLM provider (Groq and/or Google), and data requests go to SEC EDGAR, Yahoo Finance and news feeds. Do not analyse anything you would not send to those services.
+- **What leaves your machine:** the evidence records and prompts for each analysis are sent to your configured LLM provider (Groq, Google and/or NVIDIA), and data requests go to SEC EDGAR, Yahoo Finance and news feeds (Finnhub when a key is set). Do not analyse anything you would not send to those services.
 - **Signing key:** alpha packets are signed with an Ed25519 key generated on first run (`AP2_PRIVATE_KEY_PATH`, file mode 0600). Never commit it.
 - Alpha packets prove **integrity** (the content was not altered after signing by this key), not that the analysis is correct.
 

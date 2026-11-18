@@ -239,7 +239,8 @@ def _news_response(symbol: str, days: int, limit: int) -> NewsResponse:
         articles=[NewsArticle(id=a["id"], title=a["title"], url=a.get("url"), source=a.get("source"),
                               published_at=a.get("published_at"), summary=a.get("summary"),
                               providers=a.get("providers", [])) for a in news["articles"]],
-        providers_failed=news.get("providers_failed", {}), warnings=news.get("warnings", []))
+        providers_failed=news.get("providers_failed", {}), providers_skipped=news.get("providers_skipped", {}),
+        provider_counts=news.get("provider_counts", {}), warnings=news.get("warnings", []))
 
 
 @router.get("/api/v1/ticker/{symbol}/news", response_model=NewsResponse, tags=["Market Data"])

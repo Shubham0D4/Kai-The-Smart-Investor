@@ -104,6 +104,13 @@ export const NewsWidget = ({ title, fetcher }) => {
                     <span className="small text-muted">{a.source || 'Unknown source'}{a.published_at ? ` · ${dateTime(a.published_at)}` : ''}</span>
                 </div>
             ))}
+            {data && Object.keys(data.provider_counts || {}).length > 0 && (
+                <Note>
+                    Feed coverage: {Object.entries(data.provider_counts).map(([name, n]) => `${name} ${n}`).join(' · ')}
+                    {Object.keys(data.providers_skipped || {}).length > 0 &&
+                        ` · not used: ${Object.entries(data.providers_skipped).map(([name, why]) => `${name} (${why})`).join(', ')}`}
+                </Note>
+            )}
             {data && Object.keys(data.providers_failed || {}).length > 0 && (
                 <Note>Some news sources failed: {Object.keys(data.providers_failed).join(', ')}</Note>
             )}

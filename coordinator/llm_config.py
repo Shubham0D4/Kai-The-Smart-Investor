@@ -21,7 +21,7 @@ class _Strict(BaseModel):
 
 
 class ModelSpec(_Strict):
-    provider: Literal["groq", "gemini"]
+    provider: Literal["groq", "gemini", "nvidia", "openrouter"]
     model: str = Field(min_length=1)
     reasoning: Optional[Literal["low", "medium", "high"]] = None
     thinking_budget: Optional[int] = Field(default=None, ge=0)
@@ -31,8 +31,10 @@ class ModelSpec(_Strict):
     def _fits_provider(self):
         if self.provider == "groq" and (self.thinking_budget is not None or self.thinking_level):
             raise ValueError(f"{self.model}: thinking_budget/thinking_level are gemini settings")
+        if self.provider in ("nvidia", "openrouter") and (self.thinking_budget is not None or self.thinking_level):
+            raise ValueError(f"{self.model}: thinking_budget/thinking_level are gemini settings")
         if self.provider == "gemini" and self.reasoning:
-            raise ValueError(f"{self.model}: reasoning is a groq setting; use thinking_budget or thinking_level")
+            raise ValueError(f"{self.model}: reasoning is a groq/nvidia setting; use thinking_budget or thinking_level")
         if self.thinking_budget is not None and self.thinking_level:
             raise ValueError(f"{self.model}: set thinking_budget or thinking_level, not both")
         return self
@@ -75,6 +77,10 @@ class LLMConfig(_Strict):
     roles: Dict[Literal["charlie", "delta", "gamma", "vega", "sigma", "chat"], List[ModelSpec]]
     max_output_tokens: MaxOutputTokens
     budget: BudgetConfig
+    # Largest request (prompt + output cap, in tokens) a provider accepts at once. Groq's free tier
+    # rejects any request above its 8,000 tokens-per-minute limit; Kai sizes the output cap to fit
+    # and sends a request that cannot fit to the next model in the chain instead.
+    request_token_limits: Dict[Literal["groq", "gemini", "nvidia", "openrouter"], int] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _all_roles(self):

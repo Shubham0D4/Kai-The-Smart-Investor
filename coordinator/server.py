@@ -35,7 +35,7 @@ from agents.charlie_fundamental.agent import CharlieAgent
 from agents.delta_sentiment.agent import DeltaAgent
 from agents.gamma_valuation.agent import GammaAgent
 from agents.vega_catalyst.agent import VegaAgent
-from agents.schema import generate_validated, render_critiques, render_final
+from agents.schema import schema_instructions, evidence_block, generate_agent_output, generate_validated, render_critiques, render_final
 from judge.verifier import verify_output
 from mcp_server.tools.catalysts import fetch_catalysts
 from mcp_server.tools.market_data import fetch_market_data
@@ -367,6 +367,68 @@ class DebateCoordinator:
                 result=metrics["dcf_analysis"]["value_per_share"],
             )
 
+    def _repair_grounding(self, name: str, v, floor: float):
+        """One targeted repair call for an agent below the faithfulness floor. The agent sees only its
+        own evidence, its own output and the code's reasons for each failed claim. The repaired output
+        replaces the original only if it re-verifies above the floor, with the denominator held at the
+        ORIGINAL claim count so dropping claims cannot raise the score. Original claims, failures and
+        the outcome are kept in debate_log["grounding_repairs"]."""
+        original = self.transcript.round1[name]
+        evidence = self.transcript.evidence[name]
+        agent = getattr(self, name, None)
+        model = getattr(agent, "model", None)
+        rec = {"original": original.model_dump(), "original_faithfulness": v.faithfulness,
+               "failures": [c.model_dump() for c in v.checks if not c.verified and c.kind != "inference"],
+               "accepted": False}
+        self.logger.debate_log.setdefault("grounding_repairs", {})[name] = rec
+        if model is None or not (rec["failures"] or original.malformed_notes):
+            return v
+        claim_by_id = {c.id: c for c in original.claims}
+        lines = []
+        for f in rec["failures"]:
+            c = claim_by_id.get(f["claim_id"])
+            lines.append(f'- {f["claim_id"]} "{c.text if c else ""}": {f.get("reason")}: {f.get("detail") or ""}')
+        lines += [f"- {n}" for n in original.malformed_notes]
+        prompt = f"""
+{evidence_block(evidence)}
+
+Your round-1 output was checked in code against the evidence above. These claims failed or were removed as malformed:
+{chr(10).join(lines)}
+
+Your previous output:
+{json.dumps(original.model_dump(), separators=(",", ":"))}
+
+Return a corrected full output. For each failed claim do ONE of: (a) cite every record whose figure appears in
+its wording, using the op that matches the figures (a margin change needs the ratio claim for each year as its
+own claim, so split it into one claim per figure), (b) remove the figure that is not cited, or (c) fix the
+number or direction to what the evidence shows. Keep claims that passed. Use only the evidence above; never
+add data from outside it.
+
+{schema_instructions(name, 1)}
+"""
+        result = generate_agent_output(model, prompt, agent=name, round_number=1, evidence=evidence,
+                                       max_output_tokens=load_llm_config().max_output_tokens.round1,
+                                       budget_left=self._budget_left(name))
+        self._track_usage(name, 1, result.token_usage, ok=result.ok, models=result.models,
+                          error_type=result.error_type)
+        if not result.ok:
+            rec["error"] = result.error
+            return v
+        new = verify_output(result.output, evidence, self.thresholds.verification, self.quant_report)
+        orig_n = v.checkable + len(original.dropped_malformed)   # dropped claims still count in the denominator
+        denom = max(new.checkable, orig_n, self.thresholds.verification.min_checkable_claims)
+        adj = round(new.verified / denom, 6)
+        rec.update(repaired=result.output.model_dump(), repaired_faithfulness=new.faithfulness,
+                   adjusted_faithfulness=adj, denominator=denom,
+                   repaired_failures=[c.model_dump() for c in new.checks if not c.verified and c.kind != "inference"])
+        if adj >= floor and new.verified >= v.verified:
+            new = new.model_copy(update={"denominator": denom, "faithfulness": adj})
+            self.transcript.round1[name] = result.output
+            rec["accepted"] = True
+            self.warnings.append(f"{name}: grounding repair accepted (faithfulness {v.faithfulness:.2f} -> {adj:.2f})")
+            return new
+        return v
+
     def _verify_round1(self) -> Optional[Tuple[str, str]]:
         """Circuit breaker (C4): verify every round-1 claim against the fetched data in code and
         drop agents below the faithfulness floor. Returns (reason, detail) to stop, else None."""
@@ -375,6 +437,8 @@ class DebateCoordinator:
         for name in self.transcript.participants():
             v = verify_output(self.transcript.round1[name], self.transcript.evidence[name],
                               self.thresholds.verification, self.quant_report)
+            if v.faithfulness < cb.min_agent_faithfulness:
+                v = self._repair_grounding(name, v, cb.min_agent_faithfulness)
             self.transcript.set_verification(name, v)
             report[name] = v.model_dump()
             if v.faithfulness < cb.min_agent_faithfulness:

@@ -8,3 +8,5 @@ COMMS PROTOCOL (cockpit-radio style: short, standard words, no filler):
 - Own claims after critique: kept, revised or withdrawn.
 - Limits: claim text 20 words, argument 25 words, any reason 20 words, at most 4 risks of 12 words.
 - Write text fields in plain English. Every number in a text field must equal a cited value.
+- One number per claim. equals cites exactly 1 evidence id; growth, cagr, ratio and diff cite exactly 2. A claim with the wrong count, or several numbers packed into one text, is rejected unread.
+- A number behind a cited computed metric (the EPS inside a P/E, the growth rate inside a PEG) needs its own record cited too; otherwise leave it out.

@@ -47,9 +47,9 @@ class NumericClaim(BaseModel):
     id: str = CLAIM_ID
     kind: Literal["numeric"]
     text: str
-    value: float
-    unit: str
-    op: Literal["equals", "growth", "ratio", "diff"]
+    value: Optional[float] = None     # derived by the verifier from the cited records when omitted
+    unit: str = ""
+    op: Literal["equals", "growth", "ratio", "diff", "cagr"]
     evidence: List[str]
 
     @model_validator(mode="after")
@@ -89,6 +89,8 @@ class AgentOutput(BaseModel):
     confidence: float = Field(ge=0, le=100)
     claims: List[Claim] = Field(min_length=1)
     risks: List[str] = Field(default_factory=list)
+    dropped_malformed: List[str] = Field(default_factory=list)   # claim ids removed for a structural fault
+    malformed_notes: List[str] = Field(default_factory=list)     # why each was removed (shown to the repair call)
 
     @model_validator(mode="after")
     def _references(self):
@@ -176,11 +178,16 @@ SCHEMA_INSTRUCTIONS = """
 Return ONLY a JSON object (the schema is enforced):
 {{"agent": "{agent}", "round": {round}, "stance": "bullish"|"neutral"|"bearish", "confidence": 0-100,
  "claims": [
-  {{"id": "C1", "kind": "numeric", "text": "<claim>", "value": <number>, "unit": "<USD|percent|ratio|x|...>", "op": "equals"|"growth"|"ratio"|"diff", "evidence": ["<id>"]}},
+  {{"id": "C1", "kind": "numeric", "text": "<claim>", "op": "equals"|"growth"|"ratio"|"diff"|"cagr", "evidence": ["<id>"]}},
   {{"id": "C2", "kind": "quote", "text": "<claim>", "quote": "<verbatim span>", "evidence": ["<news id>"]}},
   {{"id": "C3", "kind": "inference", "text": "<conclusion>", "based_on": ["C1", "C2"]}}],
  "risks": ["<risk>"]}}
-ops: equals = e0 (one id); growth = e0/e1 - 1 (newer first); ratio = e0/e1; diff = e0 - e1.
+ops: equals = e0 (one id); growth = e0/e1 - 1 (newer first, total change, not annual); cagr = (e0/e1)^(1/years) - 1 with
+years taken from the two FY ids (newer first; use for "per year" or CAGR); ratio = e0/e1; diff = e0 - e1.
+Do NOT write the result number as a field: the system computes it from the cited ids. Write the figure in "text"
+as you would say it (24.4%, $98.8B, 1.2x). Cited ids must be exactly the inputs of the op, and every number in
+"text" must be the result or one of the cited values, so cite every figure you mention and put one result per
+claim. Use the right direction (rose vs fell; expanded vs narrowed). A wrong figure or direction fails the claim.
 quote: copy a span verbatim from the cited article's title or summary.
 Claim ids are C1, C2, ... (at most C15); inference based_on lists those ids, never evidence ids.
 Use only the evidence above, no outside knowledge. At least 3 numeric or quote claims.
@@ -263,8 +270,7 @@ def claim_json_schema(evidence: Iterable[EvidenceRecord]) -> Dict:
                       "based_on": _arr(_str(CLAIM_IDS), 1)})]
     if numeric_ids:
         variants.insert(0, _obj({
-            "id": _str(CLAIM_IDS), "kind": _str(["numeric"]), "text": _str(), "value": {"type": "number"},
-            "unit": _str(), "op": _str(["equals", "growth", "ratio", "diff"]),
+            "id": _str(CLAIM_IDS), "kind": _str(["numeric"]), "text": _str(), "op": _str(["equals", "growth", "ratio", "diff", "cagr"]),
             "evidence": _arr(_str(numeric_ids), 1, 2)}))
     if text_ids:
         variants.insert(1, _obj({"id": _str(CLAIM_IDS), "kind": _str(["quote"]), "text": _str(), "quote": _str(),
@@ -335,10 +341,56 @@ def parse_model(text: str, model_cls: Type[M]) -> M:
         raise ValueError(f"schema violation: {e.errors(include_url=False)}") from e
 
 
+_OPS = ("equals", "growth", "ratio", "diff", "cagr")
+
+
+def _drop_malformed_numeric(data: Any) -> None:
+    """Remove numeric claims with a structural fault (unknown op, wrong number of evidence ids) and the
+    inferences resting on them. They never reach the analysis, so nothing false is credited; the ids
+    are recorded in `dropped_malformed`. One stubborn malformed claim no longer discards a whole
+    agent's otherwise valid output. Any other fault (unknown evidence id, bad JSON) still fails."""
+    if not isinstance(data, dict) or not isinstance(data.get("claims"), list):
+        return
+    for c in data["claims"]:
+        # Results are computed by the verifier from the cited records. A model-written number or unit
+        # ("38.7" with unit "B") is a second, unverified statement of the same figure: ignore it. The
+        # claim's WORDING is still checked against the computed result and the cited records.
+        if isinstance(c, dict) and c.get("kind") == "numeric":
+            c["value"], c["unit"] = None, ""
+    bad = set()
+    notes = []
+    for c in data["claims"]:
+        if isinstance(c, dict) and c.get("kind") == "numeric":
+            ev = c.get("evidence")
+            need = 1 if c.get("op") == "equals" else 2
+            if c.get("op") not in _OPS or not isinstance(ev, list) or len(ev) != need:
+                bad.add(c.get("id"))
+                notes.append(f'{c.get("id")} "{str(c.get("text"))[:90]}": op {c.get("op")!r} with '
+                             f'{len(ev) if isinstance(ev, list) else 0} evidence id(s); '
+                             f'equals needs exactly 1, growth/cagr/ratio/diff exactly 2')
+    changed = True
+    while changed:
+        changed = False
+        for c in data["claims"]:
+            if isinstance(c, dict) and c.get("id") not in bad and c.get("kind") == "inference" \
+                    and any(b in bad for b in (c.get("based_on") or [])):
+                bad.add(c.get("id")); changed = True
+    if bad:
+        data["claims"] = [c for c in data["claims"] if not (isinstance(c, dict) and c.get("id") in bad)]
+        data["dropped_malformed"] = sorted(str(b) for b in bad)
+        data["malformed_notes"] = notes
+
+
 def validate_output(
     text: str, *, agent: str, round_number: int, evidence_ids: Iterable[str]
 ) -> AgentOutput:
     """Parse and validate a round-1 reply. Raises ValueError with a readable reason."""
+    try:
+        data = extract_json(text)
+        _drop_malformed_numeric(data)
+        text = json.dumps(data)
+    except (ValueError, json.JSONDecodeError):
+        pass                                   # parse_model reports it
     out = parse_model(text, AgentOutput)
     if out.agent != agent or out.round != round_number:
         raise ValueError(f"expected agent={agent!r} round={round_number}, got agent={out.agent!r} round={out.round}")

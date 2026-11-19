@@ -139,16 +139,90 @@ def ungrounded_numbers(text: str, allowed: Iterable[float], tol: float) -> List[
 
 # --------------------------------------------------------------------------- claim checks
 
-def _expected(op: str, values: List[float]) -> Optional[float]:
+_UP = re.compile(r"\b(rose|risen|rises|grew|grows|increased?|increases|climbed|gained?|surged?|jumped|expanded)\b", re.I)
+_DOWN = re.compile(r"\b(fell|falls|fallen|declined?|declines|dropped?|decreased?|decreases|shrank|shrunk|slid|plunged|contracted)\b", re.I)
+
+
+def _direction_conflict(op: str, expected: float, text: str) -> Optional[str]:
+    """Wording that says the opposite of the computed sign ("fell" when it rose). Only fires when the
+    text uses one direction exclusively, so mixed wording ("rose after it fell") is not judged.
+    Not applied to diff: its sign only reflects the order the evidence ids were listed in."""
+    if op not in ("growth", "cagr") or abs(expected) < 1e-12:
+        return None
+    up, down = bool(_UP.search(text or "")), bool(_DOWN.search(text or ""))
+    if up and not down and expected < 0:
+        return "wording says the figure rose but the data shows a decrease"
+    if down and not up and expected > 0:
+        return "wording says the figure fell but the data shows an increase"
+    return None
+
+
+def _fy(evidence_id: str) -> Optional[int]:
+    m = re.search(r"FY(\d{4})", evidence_id or "")
+    return int(m.group(1)) if m else None
+
+
+def _expected(op: str, values: List[float], ids: Optional[List[str]] = None) -> Optional[float]:
     e0 = values[0]
     if op == "equals":
         return e0
     e1 = values[1]
     if op == "diff":
         return e0 - e1
+    if op in ("growth", "cagr") and ids:
+        # Direction is newer vs older regardless of citation order: wording like "from FY2021 to
+        # FY2025" invites oldest-first citation, which used to invert the computed sign and fail
+        # correct claims (and made the repair loop unwinnable). FY-tagged records are reordered;
+        # anything without FY years keeps citation order, the previous convention.
+        f0, f1 = _fy(ids[0]), _fy(ids[1])
+        if f0 is not None and f1 is not None and f0 < f1:
+            e0, e1 = e1, e0
+            ids = [ids[1], ids[0]]
     if e1 == 0:
         return None
+    if op == "cagr":                      # compound annual growth, e0 newer than e1, years from the FY ids
+        years = (_fy(ids[0]) - _fy(ids[1])) if ids and _fy(ids[0]) and _fy(ids[1]) else None
+        if not years or years < 1 or e0 / e1 <= 0:
+            return None
+        return (e0 / e1) ** (1 / years) - 1
     return e0 / e1 - 1 if op == "growth" else e0 / e1
+
+
+def _decimals(x: float) -> int:
+    t = repr(float(x))
+    return len(t.split(".", 1)[1].rstrip("0")) if "." in t and "e" not in t else 0
+
+
+def _rounded_ok(value: float, scale: float, expected: float) -> bool:
+    """The stated number is the expected one rounded to the precision it was written with
+    (2.0 for 2.0219): within half a unit of its last digit and within 5%."""
+    half = 0.5 * 10 ** (-_decimals(value)) * scale
+    return abs(value * scale - expected) <= half + 1e-12 and abs(value * scale - expected) <= 0.05 * max(abs(expected), 1e-9)
+
+
+def _derived(values: List[float]) -> List[float]:
+    """Other figures that follow arithmetically from the cited records alone: the same two numbers
+    framed the other way round (price above fair value by 59% vs fair value below price by 37%).
+    Computed here, never taken from the model; nothing outside the cited records enters."""
+    out: List[float] = []
+    if len(values) == 1:
+        out.append(values[0] - 1)                      # beta 1.18 -> "18% above the market"
+    elif len(values) == 2:
+        a, b = values
+        out += [a - b, b - a]
+        if b:
+            out += [a / b, a / b - 1, 1 - a / b]
+        if a:
+            out += [b / a, b / a - 1, 1 - b / a]
+    return out
+
+
+def _label_numbers(evidence: Dict[str, EvidenceRecord], ids: List[str]) -> List[float]:
+    """Numbers printed in the cited records' own labels (e.g. the discount rate a DCF scenario used)."""
+    out: List[float] = []
+    for i in ids:
+        out += [q.value for q in extract_quantities(evidence[i].label or "")]
+    return out
 
 
 def verify_numeric(claim: NumericClaim, evidence: Dict[str, EvidenceRecord], tol: float) -> ClaimCheck:
@@ -162,17 +236,29 @@ def verify_numeric(claim: NumericClaim, evidence: Dict[str, EvidenceRecord], tol
     values = [evidence[e].value for e in claim.evidence]
     if any(v is None for v in values):
         return fail("no_value", detail="cited evidence has no numeric value")
-    expected = _expected(claim.op, values)
-    stated = claim.value * unit_scale(claim.unit)
+    expected = _expected(claim.op, values, list(claim.evidence))
     if expected is None:
-        return fail("bad_operation", stated=stated, detail=f"{claim.op} with a zero denominator")
-    if not _close(stated, expected, tol):
-        return fail("value_mismatch", expected=expected, stated=stated,
-                    detail=f"stated {stated:,.6g}, data gives {expected:,.6g}")
-    bad = ungrounded_numbers(claim.text, [stated, expected, claim.value, *values], tol)
+        return fail("bad_operation", detail=f"{claim.op} with a zero denominator or no usable years")
+    if claim.value is None:
+        # Deterministic path: the system computed the figure from the cited records. The model only
+        # writes the wording, which is checked below against that figure and the cited values.
+        stated = expected
+    else:
+        scale = unit_scale(claim.unit)
+        stated = claim.value * scale
+        if not (_close(stated, expected, tol) or _rounded_ok(claim.value, scale, expected)):
+            return fail("value_mismatch", expected=expected, stated=stated,
+                        detail=f"stated {stated:,.6g}, data gives {expected:,.6g}")
+    # Every figure in the wording must be this claim's own result or one of its CITED records.
+    # Values the agent fetched but did not cite do not ground the wording.
+    allowed = [stated, expected, *values, *(_derived(values) if claim.op in ("diff", "ratio", "equals") else []), *_label_numbers(evidence, claim.evidence)]
+    bad = ungrounded_numbers(claim.text, allowed, tol)
     if bad:
         return fail("ungrounded_number", expected=expected, stated=stated,
-                    detail=f"wording contains numbers not in the data: {bad}")
+                    detail=f"wording contains numbers not in the cited data: {bad}")
+    wrong = _direction_conflict(claim.op, expected, claim.text)
+    if wrong:
+        return fail("direction_mismatch", expected=expected, stated=stated, detail=wrong)
     return ClaimCheck(claim_id=claim.id, kind="numeric", checkable=True, verified=True,
                       expected=expected, stated=stated)
 
@@ -262,7 +348,7 @@ def verify_output(output: AgentOutput, evidence: List[EvidenceRecord], cfg: Veri
             return []
         seen.add(cid)
         if isinstance(c, NumericClaim):
-            vals = [c.value * unit_scale(c.unit), c.value]
+            vals = [c.value * unit_scale(c.unit), c.value] if c.value is not None else []
             vals += [by_id[e].value for e in c.evidence if e in by_id and by_id[e].value is not None]
             if checks.get(cid) and checks[cid].expected is not None:
                 vals.append(checks[cid].expected)
